@@ -96,4 +96,21 @@ if __name__ == "__main__":
     )
     table.print_table(4)
 
+
+    print("")
+    print("### brank(row)")
+
+    table = SimpleTable.SimpleTable()
+    table.set_header(["id", "name"])
+    table.print_table()
+
+
+    print("")
+    print("### brank(both)")
+
+    table = SimpleTable.SimpleTable()
+    table.set_rows([])
+    table.print_table()
+
+
     sys.exit(0)
