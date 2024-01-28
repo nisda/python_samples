@@ -2,6 +2,7 @@ import json
 import os
 import datetime
 import decimal 
+import sys
 
 JSON_IN  = os.path.join(os.path.dirname(__file__), "sample-input.json")
 JSON_OUT = os.path.join(os.path.dirname(__file__), "sample-output.json")
@@ -12,7 +13,10 @@ def json_serialize(obj):
     if isinstance(obj, (datetime.datetime, datetime.date)):
         return obj.isoformat()
     if isinstance(obj, decimal.Decimal):
-        return float(obj)
+        if '.' in str(obj):
+            return float(obj)
+        else:
+            return int(obj)
     # 上記以外はサポート対象外.
     raise TypeError ("Type %s not serializable" % type(obj))
 
@@ -27,13 +31,18 @@ if __name__ == '__main__':
         "float": 1234.56,
         "dict" : {
             "dt" : datetime.datetime.now(),
-            "decimal": decimal.Decimal(123456.78),
+            "decimal_1": decimal.Decimal(-123456),
+            "decimal_2": decimal.Decimal(-123456.78),
+            "decimal_3": decimal.Decimal(-123456.000),
         },
         "null": None,
         "list" : [
-            "a1",
-            "a2",
-            "a3"
+            "d1-a",
+            "d1-b",
+            [
+                "d2-a",
+                "d2-b",
+            ],
         ],
         "tuple" : ("t1", "t2"),
     }
@@ -48,6 +57,9 @@ if __name__ == '__main__':
         sort_keys=True,
     )
     print(json_str)
+
+    sys.exit(0)
+
 
     # ファイル出力
     print("--- ファイル出力：json.dump")
