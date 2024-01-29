@@ -25,7 +25,8 @@ class RestAPI:
         headers:dict=None,
         query_strings:dict=None,
         data:dict=None,
-        files:dict=None
+        files:dict=None,
+        raise_http_error:bool=False,
     ):
         '''リクエスト'''
 
@@ -65,7 +66,7 @@ class RestAPI:
         }
 
         # リクエスト生成
-        if data is None:
+        if send_data is None:
             req = urllib.request.Request(
                 method=method.upper(),
                 url=url_full,
@@ -80,15 +81,33 @@ class RestAPI:
             )
 
         # リクエスト実行
-        with urllib.request.urlopen(req) as res:
-            return {
-                "headers": res.getheaders(),
-                "status": res.status,
-                "reason": res.reason,
-                "msg": res.msg,
-                "body": res.read().decode(),
-            }
+        try:
+            with urllib.request.urlopen(req) as res:
+                return {
+                    "headers": res.getheaders(),
+                    "status": res.status,
+                    "reason": res.reason,
+                    "msg": res.msg,
+                    "body": res.read().decode(),
+                }
+        except urllib.error.HTTPError as e:
+            if raise_http_error:
+                raise e
+            else:
+                # print(dir(e))
+                # print("==============================")
+                # print(dir(e.headers))
+                # print("==============================")
+                # print([ list(x) for x in e.headers.items()])
+                # print("==============================")
 
+                return {
+                    "headers": [ list(x) for x in e.headers.items() ],
+                    "status": e.code,
+                    "reason": e.reason,
+                    "msg": e.msg,
+                    "body": e.read().decode(),
+                }
 
     def __get_content_type(self, filename:str):
         return mimetypes.guess_type(filename)[0] or 'application/octet-stream'
