@@ -94,13 +94,6 @@ class RestAPI:
             if raise_http_error:
                 raise e
             else:
-                # print(dir(e))
-                # print("==============================")
-                # print(dir(e.headers))
-                # print("==============================")
-                # print([ list(x) for x in e.headers.items()])
-                # print("==============================")
-
                 return {
                     "headers": [ list(x) for x in e.headers.items() ],
                     "status": e.code,
