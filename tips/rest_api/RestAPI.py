@@ -125,6 +125,7 @@ class RestAPI:
         CHAR_ENCODING = "utf-8"
         CRLF = bytes("\r\n", CHAR_ENCODING)
         L = []
+        data = data or {}
         for (key, value) in data.items():
             L.append(bytes("--" + BOUNDARY_STR, CHAR_ENCODING))
             L.append(bytes('Content-Disposition: form-data; name="%s"' % key, CHAR_ENCODING))
