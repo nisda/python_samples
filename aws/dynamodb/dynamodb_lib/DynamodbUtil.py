@@ -1,4 +1,26 @@
 from typing import List, Dict, Any
+from boto3.dynamodb.types import TypeSerializer, TypeDeserializer, Binary
+
+
+# boto3.dynamodb.types.Binary -> bytes
+def __convert_binary_to_bytes(item):
+    if isinstance(item, list):
+        return [ __convert_binary_to_bytes(x) for x in item ]
+    if isinstance(item, dict):
+        return { k:__convert_binary_to_bytes(v) for k,v in item.items() }
+    if isinstance(item, Binary):
+        return item.value
+    else:
+        return item
+
+
+def type_serialize(item: dict):
+    return {k: TypeSerializer().serialize(value=v) for k, v in item.items()}
+
+
+def type_deserialize(item: dict):
+    return __convert_binary_to_bytes({k: TypeDeserializer().deserialize(value=v) for k, v in item.items()})
+
 
 def update_expression(
         set_item:Dict[str, Any]=None,
