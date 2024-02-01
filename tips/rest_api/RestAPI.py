@@ -31,6 +31,7 @@ class RestAPI:
         '''リクエスト'''
 
         # data処理（よく使うcontent-typeだけ対応。必要に応じて追加）
+        data = data or {}
         send_data:bytes = None
         if len(files or {}) > 0:
             content_type, send_data = self.__encode_mu1ltipart_formdata(data=data, files=files)
