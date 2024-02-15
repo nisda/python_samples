@@ -1,7 +1,8 @@
 import json
 import os
 import datetime
-import decimal 
+import decimal
+import uuid
 import sys
 
 JSON_IN  = os.path.join(os.path.dirname(__file__), "sample-input.json")
@@ -9,14 +10,24 @@ JSON_OUT = os.path.join(os.path.dirname(__file__), "sample-output.json")
 
 
 # json.dump未対応データ型の変換関数
+# usage:
+#   json.dumps(variable, default=common_funcs.json_serialize)
 def json_serialize(obj):
+    # datetime
     if isinstance(obj, (datetime.datetime, datetime.date)):
         return obj.isoformat()
+    # defimal
     if isinstance(obj, decimal.Decimal):
         if '.' in str(obj):
             return float(obj)
         else:
             return int(obj)
+    # bytes
+    if isinstance(obj, bytes):
+        return obj.decode()
+    # uuid
+    if isinstance(obj, uuid.UUID):
+        return str(obj)
     # 上記以外はサポート対象外.
     raise TypeError ("Type %s not serializable" % type(obj))
 
@@ -36,6 +47,8 @@ if __name__ == '__main__':
             "decimal_3": decimal.Decimal(-123456.000),
         },
         "null": None,
+        "uuid": uuid.uuid4(),
+        "bytes": b'binary!',
         "list" : [
             "d1-a",
             "d1-b",
