@@ -1,5 +1,6 @@
 # coding: utf-8
 from typing import Any
+import json
 import decimal
 import re
 import datetime
@@ -17,7 +18,10 @@ def __recursvie_map(func:callable, data:Any):
 # MAPで反映する関数
 def convert_func(value:Any):
     if isinstance(value, decimal.Decimal):
-        return float(value)
+        if float(value).is_integer():
+            return int(value)
+        else:
+            return float(value)
     if isinstance(value, str) and ( m := re.fullmatch(r'@day\((.+)\)', value) ):
         days = m.group(1)
         dt = ( datetime.datetime.now() + datetime.timedelta(days=int(days)))
@@ -41,7 +45,7 @@ input_data = {
         "FC" : {
             "FCA" : 123,
             "FCB" : "asd",
-            "FCC" : [decimal.Decimal(123), 234, 456],
+            "FCC" : [decimal.Decimal(123), 234, 456.78],
         }
     }
 }
@@ -53,3 +57,4 @@ print(input_data)
 ret = __recursvie_map(func=convert_func, data=input_data)
 print("-- ret")
 print(ret)
+
