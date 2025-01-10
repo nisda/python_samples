@@ -70,7 +70,7 @@ def test_recursive_map_value_func_1():
         "date_3" : "@{day(3)}",
     }
 
-    result = recursive.recursvie_map(
+    result = recursive.recursive_map(
         data=input_data,
         value_func=lambda x: __value_converter(
             value=x,
@@ -89,7 +89,7 @@ def test_recursive_map_value_func_1():
 def test_recursive_map_list_func_1():
     input_data = [1, 2, 3, "1", "2", "3", 1, 2, 3, "1", "2", "3"]
 
-    result = recursive.recursvie_map(
+    result = recursive.recursive_map(
         data=input_data,
         list_func = lambda x: __list_converter(
             list_data=x,
@@ -108,7 +108,7 @@ def test_recursive_map_map_func_1():
         "from" : "@{day(-1,)}",
         "to" : "@{day(,2)}",
     }
-    result = recursive.recursvie_map(
+    result = recursive.recursive_map(
         data=input_data,
         dict_func = lambda x: __dict_converter(
             dict_data=x,
@@ -158,7 +158,7 @@ def test_recursive_map_1():
         }
     }
 
-    result = recursive.recursvie_map(
+    result = recursive.recursive_map(
         data=input_data,
         value_func=lambda x: __value_converter(
             value=x,

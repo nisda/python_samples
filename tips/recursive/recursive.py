@@ -2,7 +2,7 @@
 from typing import Any, Callable
 
 
-def recursvie_map(data:Any, value_func:Callable=None, list_func:Callable=None, dict_func:Callable=None):
+def recursive_map(data:Any, value_func:Callable=None, list_func:Callable=None, dict_func:Callable=None):
     """再帰的MAP処理
     dictやlistに対し、最下層まで変換処理を適用する。
     値の変換だけでなく、list_func や dict_func でデータ数やキー名なども変化させることが可能。
@@ -17,7 +17,7 @@ def recursvie_map(data:Any, value_func:Callable=None, list_func:Callable=None, d
         arg1.data と同じ型: 各変換関数を適用したデータ
 
     Examples:
-        result = recursive.recursvie_map(
+        result = recursive.recursive_map(
             data=input_data,
             value_func=lambda x: __value_converter(
                 value=x,
@@ -49,7 +49,7 @@ def recursvie_map(data:Any, value_func:Callable=None, list_func:Callable=None, d
         if callable(dict_func):
             result = dict_func(result)
         result = {
-            k : recursvie_map(data=v, value_func=value_func, list_func=list_func, dict_func=dict_func)
+            k : recursive_map(data=v, value_func=value_func, list_func=list_func, dict_func=dict_func)
             for k,v in result.items()
         }
         return result
@@ -61,7 +61,7 @@ def recursvie_map(data:Any, value_func:Callable=None, list_func:Callable=None, d
         if callable(list_func):
             result = list_func(result)
         result = [
-            recursvie_map(data=v, value_func=value_func, list_func=list_func, dict_func=dict_func)
+            recursive_map(data=v, value_func=value_func, list_func=list_func, dict_func=dict_func)
             for v in result
         ]
         return result
