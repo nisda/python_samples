@@ -1,60 +1,76 @@
 # coding: utf-8
-from typing import Any
-import json
-import decimal
-import re
-import datetime
+from typing import Any, Callable
 
-# 再帰的MAP
-def __recursvie_map(func:callable, data:Any):
+
+def recursvie_map(data:Any, value_func:Callable=None, list_func:Callable=None, dict_func:Callable=None):
+    """再帰的MAP処理
+    dictやlistに対し、最下層まで変換処理を適用する。
+    値の変換だけでなく、list_func や dict_func でデータ数やキー名なども変化させることが可能。
+
+    Args:
+        data        : 変換前データ。type = dict | list | scalar
+        value_func  : スカラー値項目に適用する変換関数
+        list_func   : list項目に適用する変換関数(ReturnType -> list)
+        dict_func   : dict項目に適用する変換関数(ReturnType -> dict)
+
+    Returns:
+        arg1.data と同じ型: 各変換関数を適用したデータ
+
+    Examples:
+        result = recursive.recursvie_map(
+            data=input_data,
+            value_func=lambda x: __value_converter(
+                value=x,
+                [param1=value1],
+                [...]
+            ),
+            list_func = lambda x: __list_converter(
+                list_data=x,
+                [param1=value1],
+                [...]
+            ),
+            dict_func = lambda x: __dict_converter(
+                dict_data=x,
+                [param1=value1],
+                [...]
+            )
+        )
+
+    Note:
+        value_func が最後に適用される。
+
+    """
+    
+
+    # dict
     if isinstance(data, dict):
-        return { k:__recursvie_map(func=func, data=v) for k,v in data.items() }
-    elif isinstance(data, list):
-        return [ __recursvie_map(func=func, data=v) for v in data ]
-    else:
-        return func(data)
-
-
-# MAPで反映する関数
-def convert_func(value:Any):
-    if isinstance(value, decimal.Decimal):
-        if float(value).is_integer():
-            return int(value)
-        else:
-            return float(value)
-    if isinstance(value, str) and ( m := re.fullmatch(r'@day\((.+)\)', value) ):
-        days = m.group(1)
-        dt = ( datetime.datetime.now() + datetime.timedelta(days=int(days)))
-        return dt.strftime("%Y-%m-%d")
-    return value
-
-# テストINPUTデータ
-input_data = {
-    "aaa" : "AAA",
-    "bbb" : 1234,
-    "ccc" : decimal.Decimal(12345.67),
-    "ddd" : decimal.Decimal(23456),
-    "eee" : [
-        "xxx",
-        "yyy",
-        decimal.Decimal(123),
-    ],
-    "fff" : {
-        "FA" : 123,
-        "FB" : "@day(-1)",
-        "FC" : {
-            "FCA" : 123,
-            "FCB" : "asd",
-            "FCC" : [decimal.Decimal(123), 234, 456.78],
+        # dict_func で変換処理してから再帰処理にかける。
+        result:dict = data
+        if callable(dict_func):
+            result = dict_func(result)
+        result = {
+            k : recursvie_map(data=v, value_func=value_func, list_func=list_func, dict_func=dict_func)
+            for k,v in result.items()
         }
-    }
-}
+        return result
 
-# テスト実行
-print("-- input_data")
-print(input_data)
+    # list
+    elif isinstance(data, list):
+        # list_func で変換処理してから再帰処理にかける。
+        result:list = data
+        if callable(list_func):
+            result = list_func(result)
+        result = [
+            recursvie_map(data=v, value_func=value_func, list_func=list_func, dict_func=dict_func)
+            for v in result
+        ]
+        return result
 
-ret = __recursvie_map(func=convert_func, data=input_data)
-print("-- ret")
-print(ret)
+    # scalar
+    else:
+        # value_func で変換処理
+        if callable(value_func):
+            return value_func(data)
+        else:
+            return data
 
