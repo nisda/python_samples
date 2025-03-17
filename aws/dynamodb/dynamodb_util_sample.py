@@ -1,5 +1,5 @@
 import json
-import dynamodb_lib.DynamodbUtil as DynamodbUtil
+import mylibs.dynamodb_util as DynamodbUtil
 
 #-------------------------------------------------------
 # for `Table.update_item()` and others
