@@ -125,6 +125,15 @@ class Table:
             # ConditionExpression='attribute_not_exists(xxx)'   # 後で考える
         )
 
+    def put_items(self, Items:List[dict]):
+        """データ追加（複数）"""
+
+        # データ追加
+        with self.__table.batch_writer() as batch:
+            for item in Items:
+                batch.put_item(Item = item)
+        return 0
+
 
     def update_item(self, 
         Key,
@@ -151,14 +160,14 @@ class Table:
         self.__table.delete_item(Key, **kwargs,)
 
 
-    def delete_items(self, items:List[dict]):
+    def delete_items(self, Items:List[dict]):
         """データ削除（複数）"""
 
         # キー項目を抽出
         key_names:str = [ x["AttributeName"] for x in self.__table.key_schema ]
 
         # キー値のリストを生成
-        delete_keys:dict = [ { k:v for k,v in x.items() if k in key_names } for x in items ]
+        delete_keys:dict = [ { k:v for k,v in x.items() if k in key_names } for x in Items ]
 
         # データ削除
         with self.__table.batch_writer() as batch:
