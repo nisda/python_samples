@@ -2,6 +2,8 @@ from typing import Any, Callable, List, Dict, Union
 from collections import OrderedDict
 import re
 import copy
+from . import list_util
+
 
 """
 ▼済
@@ -20,9 +22,56 @@ DIFF or compare?
 
 """
 
-def differ(data_left:Dict, data_right:Dict):
+def differ(data_left:Dict, data_right:Dict, include_same=False):
     """差分取得／未実装"""
-    pass
+
+    # dictのパスを取得
+    paths_left:List[str] = paths(data=data_left)
+    paths_right:List[str] = paths(data=data_right)
+
+    # パスをマージしてソート
+    paths_all = [*paths_left, *paths_right]
+    paths_all = list_util.list_list_sort(paths_all)
+
+    # 全パスの要素を比較
+    differ = []
+    prev_path = None
+    for path in paths_all:
+        # 同一パスは処理しない。
+        if prev_path == path: continue
+        prev_path = path
+
+        value_left:Any = None
+        value_right:Any = None
+
+
+        # 左の値を取得。存在しなかったら「右のみ」
+        try:
+            value_left = get_by_path(data=data_left, path=path)
+        except (IndexError, KeyError) as e:
+            value_right = get_by_path(data=data_right, path=path)
+            differ.append(('right', path, None, value_right))
+            continue
+
+        # 右の値を取得。存在しなかったら「左のみ」
+        try:
+            value_right = get_by_path(data=data_right, path=path)
+        except (IndexError, KeyError) as e:
+            value_left = get_by_path(data=data_left, path=path)
+            differ.append(('left', path, value_left, None))
+            continue
+
+        # 両方にパスあり。比較。
+        if value_left != value_right:
+            differ.append(('diff', path, value_left, value_right))
+        elif include_same: 
+            differ.append(('same', path, value_left, value_right))
+        else:
+            pass
+
+    # 正常終了。差分リストを返却。
+    return differ
+
 
 
 def get_by_path(data:Any, path:Union[list, str], str_path_separator='.') -> Any:
@@ -34,9 +83,13 @@ def get_by_path(data:Any, path:Union[list, str], str_path_separator='.') -> Any:
 
         idx = path.pop(0)
         if isinstance(data, list) or isinstance(data, tuple):
-            node = data[int(idx)]
+            try:
+                node = data[idx]
+            except TypeError as e:
+                # raise IndexError(f"{e.__class__.__name__}: {e}", idx) 
+                raise IndexError(repr(e), idx)
         elif isinstance(data, dict):
-            node = data.get(idx)
+            node = data[idx]
 
         if len(path) > 0:
             return __get_by_path(data=node, path=path)
