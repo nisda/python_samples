@@ -116,3 +116,75 @@ def test_empty_path(path, expect):
     ret = dict_util.get_by_path(data=input, path=path)
     assert expect == ret
 
+
+
+
+@pytest.mark.parametrize(
+    ["path", "separator", "expect"],
+    [
+        pytest.param("A.AA.AAA",  ".", "abcde"),
+        pytest.param("A.AA"    ,  ".", {"AAA": "abcde"}),
+        pytest.param("A||AA||AAA",  "||", "abcde"),
+    ]
+)
+def test_str_key(path, separator, expect):
+    input: dict = {
+        "A" : {
+            "AA" : {
+                "AAA" : "abcde"
+            }
+        }
+    }
+    ret = dict_util.get_by_path(data=input, path=path, path_separator=separator)
+    assert expect == ret
+
+
+@pytest.mark.parametrize(
+    ["path", "expect"],
+    [
+        pytest.param(["A", 1],  "int"),
+        pytest.param(["A", "1"],  "str"),
+        pytest.param(["B", 1],  "B1"),
+        pytest.param(["B", "1"],  "B1"),
+        pytest.param(["C", 2],  "C2"),
+        pytest.param(["C", "2"],  "C2"),
+    ]
+)
+def test_key_type_conversion(path, expect):
+    input: dict = {
+        "A" : {
+            1 : "int",
+            "1" : "str",
+        },
+        "B" : ["B0", "B1", "B2"],
+        "C" : ("C0", "C1", "C2"),
+    }
+    ret = dict_util.get_by_path(data=input, path=path)
+    assert expect == ret
+
+
+
+@pytest.mark.parametrize(
+    ["path", "separator", "expect"],
+    [
+        pytest.param("A.1",  ".", "str"),
+        pytest.param("B.1",  ".",  "B1"),
+        pytest.param("B/1",  "/",  "B1"),
+        pytest.param("C.2",  ".",  "C2"),
+        pytest.param("C__2",  "__",  "C2"),
+    ]
+)
+def test_key_type_conversion_str_path(path, separator, expect):
+    input: dict = {
+        "A" : {
+            1 : "int",
+            "1" : "str",
+        },
+        "B" : ["B0", "B1", "B2"],
+        "C" : ("C0", "C1", "C2"),
+    }
+    ret = dict_util.get_by_path(data=input, path=path, path_separator=separator)
+    assert expect == ret
+
+
+

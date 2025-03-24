@@ -5,33 +5,35 @@ import copy
 from . import list_util
 
 
-"""
-▼済
-ソート
-マップ（全要素処理）
-Noneの項目を取り除く（remove_null）
-含んでいるかチェック
-dictのlistから任意条件のデータを抽出する。
-データマッピング for list（指定の構造に変換）
-データマッピング for dict（指定の構造に変換）
-パスの一覧を取得
 
-▼作りたい
-クレンジング → map + func でイケる。
-DIFF or compare?
 
-"""
+def compare(dict_left:Dict, dict_right:Dict, compare_paths:List[Union[str, List[Any]]], path_separator=".") -> bool:
+    """２つのdictを指定パスの値で比較"""
 
-def differ(data_left:Dict, data_right:Dict, include_same=False):
+    # 両方のデータから比較項目を抜き出し
+    compare_data_left:List[Any]  = {
+        i: get_by_path(data=dict_left, path=compare_paths[i], path_separator=path_separator)
+        for i in range(0, len(compare_paths))
+    }
+    compare_data_right:List[Any] = {
+        i: get_by_path(data=dict_right, path=compare_paths[i], path_separator=path_separator)
+        for i in range(0, len(compare_paths))
+    }
+
+    # 比較
+    return bool(compare_data_left == compare_data_right)
+
+
+
+def differ(dict_left:Dict, dict_right:Dict, include_same=False):
     """差分取得／未実装"""
 
     # dictのパスを取得
-    paths_left:List[str] = paths(data=data_left)
-    paths_right:List[str] = paths(data=data_right)
+    paths_left:List[str] = paths(data=dict_left)
+    paths_right:List[str] = paths(data=dict_right)
 
     # パスをマージしてソート
-    paths_all = [*paths_left, *paths_right]
-    paths_all = list_util.list_list_sort(paths_all)
+    paths_all = list_util.list_list_sort([*paths_left, *paths_right])
 
     # 全パスの要素を比較
     differ = []
@@ -47,17 +49,17 @@ def differ(data_left:Dict, data_right:Dict, include_same=False):
 
         # 左の値を取得。存在しなかったら「右のみ」
         try:
-            value_left = get_by_path(data=data_left, path=path)
+            value_left = get_by_path(data=dict_left, path=path)
         except (IndexError, KeyError) as e:
-            value_right = get_by_path(data=data_right, path=path)
+            value_right = get_by_path(data=dict_right, path=path)
             differ.append(('right', path, None, value_right))
             continue
 
         # 右の値を取得。存在しなかったら「左のみ」
         try:
-            value_right = get_by_path(data=data_right, path=path)
+            value_right = get_by_path(data=dict_right, path=path)
         except (IndexError, KeyError) as e:
-            value_left = get_by_path(data=data_left, path=path)
+            value_left = get_by_path(data=dict_left, path=path)
             differ.append(('left', path, value_left, None))
             continue
 
@@ -73,34 +75,8 @@ def differ(data_left:Dict, data_right:Dict, include_same=False):
     return differ
 
 
-
-def get_by_path(data:Any, path:Union[list, str], str_path_separator='.') -> Any:
-    """パス指定で要素を取得"""
-
-    def __get_by_path(data:Any, path:list) -> Any:
-        if len(path) == 0:
-            return data
-
-        idx = path.pop(0)
-        if isinstance(data, list) or isinstance(data, tuple):
-            try:
-                node = data[idx]
-            except TypeError as e:
-                # raise IndexError(f"{e.__class__.__name__}: {e}", idx) 
-                raise IndexError(repr(e), idx)
-        elif isinstance(data, dict):
-            node = data[idx]
-
-        if len(path) > 0:
-            return __get_by_path(data=node, path=path)
-        else:
-            return node
-
-    path_copy = copy.deepcopy(path)
-    if isinstance(path_copy, str):
-        path_copy = path_copy.split(str_path_separator)
-    return __get_by_path(data=data, path=path_copy)
-
+# def extract(dict_data:Dict, paths:List[Union[str, List[Any]]], path_separator=".") -> Dict:
+#     pass
 
 
 def paths(data:dict) -> List[List[Any]]:
@@ -135,7 +111,89 @@ def paths(data:dict) -> List[List[Any]]:
     return __get_paths(data=data)
 
 
-def dict_mapping(data_dict:Dict[str,Any], mapping_dict:Dict, key_path_separator=".") -> Dict:
+
+def get_by_path(data:Any, path:Union[list, str], path_separator='.') -> Any:
+    """パス指定で要素を取得"""
+
+    def __get_by_path(data:Any, path:list) -> Any:
+        if len(path) == 0:
+            return data
+
+        idx = path.pop(0)
+
+        if isinstance(data, list) or isinstance(data, tuple):
+            # list/tuple の場合はintに変換
+            try:
+                node = data[int(idx)]
+            except TypeError as e:
+                # raise IndexError(f"{e.__class__.__name__}: {e}", idx) 
+                raise IndexError(repr(e), idx)
+
+        elif isinstance(data, dict):
+            # dict の場合、まずはそのまま取得
+            try:
+                node = data[idx]
+            except KeyError as e:
+                try:
+                    # NG時、数値型に変換可能な場合は変換して試行
+                    idx = float(idx)
+                    node = data[idx]
+                except TypeError as e:
+                    # raise IndexError(f"{e.__class__.__name__}: {e}", idx) 
+                    raise KeyError(repr(e), idx)
+
+        if len(path) > 0:
+            return __get_by_path(data=node, path=path)
+        else:
+            return node
+
+    path_copy = copy.deepcopy(path)
+    if isinstance(path_copy, str):
+        path_copy = path_copy.split(path_separator)
+
+    return __get_by_path(data=data, path=path_copy)
+
+
+
+def dict_from_paths(paths:List[List[Any]], values:List[Any]=[], path_separator=".") -> dict:
+    """ パス群を dict に変換"""
+
+    def __dict_from_path(path, values, parent_data) -> None:
+        """パスを dict に変換"""
+        if len(path) == 0: return
+
+        key = path.pop(0)
+        if len(path) == 0:
+            if len(values) > 0:
+                value = values.pop(0)
+            else:
+                value = None
+            if key not in parent_data.keys():
+                parent_data[key] = value
+        else:
+            if key not in parent_data.keys() or not isinstance(parent_data[key], dict):
+                parent_data[key] = {}
+            __dict_from_path(path, values, parent_data[key])
+
+        return
+
+    paths_copy = copy.deepcopy(paths)
+    values_copy = copy.deepcopy(values)
+    ret = {}
+    for path in paths_copy:
+        if isinstance(path, str): path = path.split(sep=path_separator)
+
+        __dict_from_path(
+            path=path,
+            values=values_copy,
+            parent_data=ret)
+
+    return ret
+
+
+
+
+def dict_mapping(data_dict:Dict[str,Any], mapping_dict:Dict, path_separator=".") -> Dict:
     """dictの値を指定のdict構造にマッピング"""
 
     def __get_dict_value(data_dict:Dict[str,Any], key_path:List[str]) -> Any:
@@ -149,19 +207,19 @@ def dict_mapping(data_dict:Dict[str,Any], mapping_dict:Dict, key_path_separator=
             else:
                 return data_dict.get(key, None)
 
-    def __dict_mapping(data_dict:Dict[str,Any], mapping_dict:Dict, key_path_separator=".") -> Dict:
+    def __dict_mapping(data_dict:Dict[str,Any], mapping_dict:Dict, path_separator=".") -> Dict:
         temp:Dict = {}
         for k, v in mapping_dict.items():
             if isinstance(v, dict):
-                temp[k] = __dict_mapping(data_dict=data_dict, mapping_dict=v, key_path_separator=key_path_separator)
+                temp[k] = __dict_mapping(data_dict=data_dict, mapping_dict=v, path_separator=path_separator)
             elif v is None:
                 temp[k] = None
             else:
-                key_path = list(v) if isinstance(v, (list, tuple)) else v.split(key_path_separator)
+                key_path = list(v) if isinstance(v, (list, tuple)) else v.split(path_separator)
                 temp[k] = __get_dict_value(data_dict=data_dict, key_path=key_path)
         return temp
 
-    return __dict_mapping(data_dict=data_dict, mapping_dict=mapping_dict, key_path_separator=key_path_separator)
+    return __dict_mapping(data_dict=data_dict, mapping_dict=mapping_dict, path_separator=path_separator)
 
 
 def list_mapping(data_list:List[Any], mapping_dict:dict, auto_order:bool=True) -> Dict:
@@ -182,7 +240,7 @@ def list_mapping(data_list:List[Any], mapping_dict:dict, auto_order:bool=True) -
 
 
     def __mapping_specify_order(data_list:List[Any], mapping_dict:dict) -> Dict:
-        """上から順に割り当てる"""
+        """指定番号の要素を割り当てる"""
         ret:Dict = {}
         for k,v in mapping_dict.items():
             if isinstance(v, dict):
@@ -311,11 +369,13 @@ def sort(data:dict) -> OrderedDict:
     """dictの再帰的ソート"""
     def __sort(data:Any):
         if isinstance(data, dict):
-            data = {k:sort(v) for k,v in data.items()}
+            return OrderedDict({
+                k:sort(data[k])
+                for k in list_util.list_sort(data=data.keys())
+            })
         else:
             return data
         # return {k:data[k] for k in sorted(data.keys())}
-        return OrderedDict(sorted(data.items()))
 
     return __sort(data=data)
 

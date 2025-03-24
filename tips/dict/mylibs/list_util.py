@@ -46,7 +46,7 @@ def list_sort(data:List[Any]) -> List[Any]:
 
         return small + [pivot] + large
 
-    return __quick_sort(data=data)
+    return __quick_sort(data=list(data))
 
 
 def list_list_sort(data:List[List[Any]]) -> List[List[Any]]:

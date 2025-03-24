@@ -12,7 +12,9 @@ def test_sort_1():
         "aa" : [987,654,"000",321,[],123,"789",456],
         "aaa" : {
           "x" : "6798",
+          99  : "ABC",
           "z" : 852,
+          111 : "DEF",
           "y" : "exg",
         },
     },
@@ -26,7 +28,7 @@ def test_sort_1():
   # キーでソートされている。
   assert list(ret.keys())                   == list(sorted(original_dict.keys()))
   assert list(ret["banana"].keys())         == list(sorted(original_dict["banana"].keys()))
-  assert list(ret["banana"]["aaa"].keys())  == list(sorted(original_dict["banana"]["aaa"].keys()))
+  assert list(ret["banana"]["aaa"].keys())  == [99, 111, "x", "y", "z"]
 
   # オリジナルとは一致しない
   assert list(ret.keys())                   != list(original_dict.keys())

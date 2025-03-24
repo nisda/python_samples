@@ -71,14 +71,14 @@ def test_dict_mapping(product_data:dict):
     }
 
 
-def test_dict_mapping_key_path_separator(product_data:dict):
+def test_dict_mapping_path_separator(product_data:dict):
     mapping_dict:dict = {
         "id" : "id",
         "product_name" : "product/name",
         "price" : ("product", "price"),
         "category" : "product.category",
     }
-    ret = dict_util.dict_mapping(data_dict=product_data, mapping_dict=mapping_dict, key_path_separator="/")
+    ret = dict_util.dict_mapping(data_dict=product_data, mapping_dict=mapping_dict, path_separator="/")
     assert ret == {
         "id" : 1,
         "product_name" : "AX0016",
