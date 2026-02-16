@@ -217,7 +217,7 @@ class Table:
 
         # Hashキーが含まれていなかったらエラー
         if search_index_defs["HASH"] not in key_names:
-            raise ValueError(f"HASH-KEY `{index_keys["HASH"]}` is required for 'key'.")
+            raise ValueError(f"HASH-KEY `{index_keys['HASH']}` is required for 'key'.")
         index_key_names  = [ x for x in key_names if x in search_index_defs.values() ]
         filter_key_names = [ x for x in key_names if x not in search_index_defs.values() ]
 
@@ -275,7 +275,7 @@ class Table:
         return ret
 
 
-    def put_item(self, item, ttl:int|datetime|None=None, **kwargs:Dict[str, Any]):
+    def put_item(self, item, ttl:int|datetime|None=None, overwrite:bool=True, **kwargs:Dict[str, Any]):
         """データ追加/更新"""
         # 追加属性セット
         temp_item:Dict[str, Any] = self._set_additional_attr(item=item, ttl=ttl)
@@ -285,17 +285,21 @@ class Table:
         upsert_key:Dict[str, Any] = { k:v for k,v in item.items() if k in key_names }
 
         # データ非存在を条件に追加（返却値の分岐のため）
-        condition_org = kwargs.pop("ConditionExpression", None)
-        condition = Not(self.__make_key_condition(keys=upsert_key, type=Key, operator=And))
-        if condition_org:
-            condition = And(condition, condition_org)
+        if not overwrite:
+            # データ非存在条件を生成
+            condition_new = Not(self.__make_key_condition(keys=upsert_key, type=Key, operator=And))
+            # 既存条件に追加
+            condition_org = kwargs.pop("ConditionExpression", None)
+            if condition_org:
+                condition_new = And(condition_new, condition_org)
+            kwargs["ConditionExpression"] = condition_new
+
 
         # 削除実行
         try:
             # PUT実行
             response = self._table.put_item(
                 Item=temp_item,
-                ConditionExpression=condition,
                 **kwargs,
             )
             ret:Dict[str, Any] = temp_item
@@ -465,7 +469,7 @@ class Table:
         else:
             # Hashキーが含まれていなかったらエラー
             if search_index_defs["HASH"] not in key_names:
-                raise ValueError(f"HASH-KEY `{index_keys["HASH"]}` is required for KeyNames.")
+                raise ValueError(f"HASH-KEY `{index_keys['HASH']}` is required for KeyNames.")
             index_key_names  = [ x for x in key_names if x in search_index_defs.values() ]
             filter_key_names = [ x for x in key_names if x not in search_index_defs.values() ]
 
