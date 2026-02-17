@@ -217,7 +217,7 @@ class Table:
 
         # Hashキーが含まれていなかったらエラー
         if search_index_defs["HASH"] not in key_names:
-            raise ValueError(f"HASH-KEY `{index_keys['HASH']}` is required for 'key'.")
+            raise ValueError(f"HASH-KEY `{search_index_defs['HASH']}` is required for 'key'.")
         index_key_names  = [ x for x in key_names if x in search_index_defs.values() ]
         filter_key_names = [ x for x in key_names if x not in search_index_defs.values() ]
 
@@ -284,20 +284,29 @@ class Table:
         key_names:str = self._pk_schema.values()
         upsert_key:Dict[str, Any] = { k:v for k,v in item.items() if k in key_names }
 
-        # データ非存在を条件に追加（返却値の分岐のため）
+        # 上書き不可：データ非存在を条件に追加
         if not overwrite:
-            # データ非存在条件を生成
-            condition_new = Not(self.__make_key_condition(keys=upsert_key, type=Key, operator=And))
-            # 既存条件に追加
+            # 既存条件
             condition_org = kwargs.pop("ConditionExpression", None)
-            if condition_org:
-                condition_new = And(condition_new, condition_org)
-            kwargs["ConditionExpression"] = condition_new
 
+            # データ非存在条件を生成
+            # condition_exists= Not(self.__make_key_condition(keys=upsert_key, type=Key, operator=And))
+            condition_exists = Not(self.__join_conditions(And, [Key(k).eq(v) for k,v in upsert_key.items()]))
 
-        # 削除実行
+            # TTL条件を生成
+            condition_ttl = None if self.ttl_name is None else (
+                Key(self.ttl_name).lt(int(datetime.now().timestamp()))
+            )
+
+            # 連結して条件変数にセット
+            kwargs["ConditionExpression"] = \
+                self.__join_conditions(operator=And, conditions=[
+                    condition_org,
+                    self.__join_conditions(operator=Or, conditions=[condition_exists, condition_ttl]),
+                ])
+
+        # PUT実行
         try:
-            # PUT実行
             response = self._table.put_item(
                 Item=temp_item,
                 **kwargs,
@@ -469,7 +478,7 @@ class Table:
         else:
             # Hashキーが含まれていなかったらエラー
             if search_index_defs["HASH"] not in key_names:
-                raise ValueError(f"HASH-KEY `{index_keys['HASH']}` is required for KeyNames.")
+                raise ValueError(f"HASH-KEY `{search_index_defs['HASH']}` is required for KeyNames.")
             index_key_names  = [ x for x in key_names if x in search_index_defs.values() ]
             filter_key_names = [ x for x in key_names if x not in search_index_defs.values() ]
 
@@ -515,7 +524,7 @@ class Table:
         for hash, grouped_key_info in grouped_keys.items():
             key_conditions[hash] = {
                 "index_keys" : self.__make_key_condition(grouped_key_info["index_keys"], type=Key),
-                "filter_keys": self.__join_key_conditions_or(key_conditions=[
+                "filter_keys": self.__join_conditions(operator=Or, conditions=[
                     self.__make_key_condition(keys=x, type=Attr)
                     for x in grouped_key_info["filter_keys"]
                 ]),
@@ -598,7 +607,7 @@ class Table:
         """データ全削除"""
 
         # キー項目を抽出
-        key_names:str = self._pk_schema.values
+        key_names:str = self._pk_schema.values()
 
         # キー値のリストを生成
         delete_keys:dict = [ { k:v for k,v in x.items() if k in key_names } for x in self.scan() ]
@@ -655,7 +664,7 @@ class Table:
                 return item
 
             # 追加して返却
-            item[self._updated_at] = datetime.now().strftime('%Y/%m/%d %H:%M:%S.%f')
+            item[self._updated_at] = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
             return item
 
         # セットして返却
@@ -664,13 +673,14 @@ class Table:
         return ret
 
 
-    def __join_key_conditions_or(self, key_conditions: List[Key|Attr]) -> Or:
-        ret = None
-        for cond in key_conditions:
-            if ret is None:
-                ret = cond
-            else:
-                ret = ret | cond
+    def __join_conditions(self, operator:And|Or, conditions: List[AttributeBase|None]) -> AttributeBase|None:
+        # 連結処理
+        ret:None|AttributeBase = None
+        for condition in [ x for x in conditions if x is not None]:
+            # conditionを指定演算子で連結
+            ret = condition if ret is None else operator(ret, condition)
+
+        # 返却
         return ret
 
 
@@ -683,7 +693,6 @@ class Table:
         """
         Docstring for __make_key_condition  
         Key/Filterの条件リソースインタフェースを生成  
-        AND条件のみ対応
         
         :param self: Description
         :param keys: Description
@@ -704,6 +713,7 @@ class Table:
                 # ret = ret & type(k).eq(v)
                 ret = operator(ret, type(k).eq(v))
         return ret
+
 
 
     def __make_hashable(self, obj) -> Tuple[Any]:
