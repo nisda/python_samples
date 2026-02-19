@@ -101,3 +101,12 @@ def test_overwrite():
     time.sleep(3)
     ret = table.put_item(item={'pk': 'ut_put', 'sk': 'ttl'}, overwrite=False, ttl=2)    # 期限切れ=上書き可
     assert isinstance(ret, dict)
+
+
+    # ttl なしは上書き不可
+    ret = table.put_item(item={'pk': 'ut_put', 'sk': 'ttl_none_ow'}, overwrite=True, ttl=0)
+    time.sleep(3)
+    ret = table.put_item(item={'pk': 'ut_put', 'sk': 'ttl_none_ow'}, overwrite=False, ttl=30) 
+    assert ret is None
+
+
