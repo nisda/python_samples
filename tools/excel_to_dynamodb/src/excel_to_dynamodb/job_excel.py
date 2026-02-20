@@ -5,25 +5,25 @@ import datetime
 import logging
 import json
 
-import utils.master_data as MasterData
-from models.ExcelTable.ExcelTable import DataTables
+from .utils import master_data as MasterData
+from .models.ExcelTable.ExcelTable import DataTables
 
-import job_common
-import job_error
+from . import job_common
+from . import job_error
 
 
 logger = logging.getLogger(__name__)
 
 
 
-def load_and_convert(system_name:str, excel_file:str):
+def load_and_convert(config_path:str, excel_file:str):
 
     #-------------------------------------
     #   データ読み込み
     #-------------------------------------
 
     # Excelからデータを読み込み
-    load_configs:dict = job_common.import_config_attr(config_name=system_name, attr_name="load_configs")
+    load_configs:dict = job_common.import_config_attr(config_name=config_path, attr_name="load_configs")
     tables:DataTables = DataTables(
         file=excel_file,
         load_configs=load_configs,

@@ -5,7 +5,7 @@ import importlib
 
 def import_config_module(config_name:str):
         # module.function を読み込み
-    config_mod = importlib.import_module(f"config.{config_name}") 
+    config_mod = importlib.import_module(config_name) 
     return config_mod
 
 

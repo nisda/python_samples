@@ -26,25 +26,6 @@ load_configs:dict = [
         "sheetname" : "縦並び複数件*",
         "tables" : {
             "TBL_A": {
-                "direction" : "horizonal",
-                "name_range": {
-                    "min_row": 3,
-                    "min_col": 2,
-                    "max_row": 0,
-                    "max_col": 2,
-                },
-                "attr_range" : {
-                    "min_row": 3,
-                    "min_col": 3,
-                    "max_row": 0,
-                    "max_col": 5,
-                },
-                "data_range" : {
-                    "min_row": 3,
-                    "min_col": 6,
-                    "max_row": 0,
-                    "max_col": 0,
-                },
                 "data_attr": {
                     "system-name" : {},
                     "config1.category" : { "convert" : { "type":"ABC.Category" } },
@@ -56,7 +37,7 @@ load_configs:dict = [
                 # *** 以下、開発中 ***
                 "data_ranges" : [
                     {
-                        "name"   : "values",
+                        "name"   : "test_values",
                         "direction" : "horizonal",
                         "header" : ["Required_2", "Caption_2", "VALUE"],
                         "min_row": 4,
@@ -65,7 +46,7 @@ load_configs:dict = [
                         "max_col": 0,
                     },
                     {
-                        "name"   : "attr",
+                        "name"   : "tests_attr",
                         "direction" : "horizonal",
                         "header" : None,
                         "min_row": 3,

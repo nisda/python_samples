@@ -1,14 +1,15 @@
 from typing import Any, List,Dict, Callable
 import logging
 import json
+import re
 
-import utils.dict_util as dict_util
-from utils.dict_util import ChainableDict
-from utils.format_ex import format_ex
-from models.ExcelTable.ExcelTable import DataTables, DataTable, DataRecord
+from .utils import dict_util as dict_util
+from .utils.dict_util import ChainableDict
+from .utils.format_ex import format_ex
+from .models.ExcelTable.ExcelTable import DataTables, DataTable, DataRecord
 
-import job_common
-from utils.dynamodb_util import Table
+from . import job_common
+from .utils.dynamodb_util import Table
 
 
 logger = logging.getLogger(__name__)
@@ -16,14 +17,14 @@ logger = logging.getLogger(__name__)
 
 
 
-def make_dynamodb_data(system_name:str, tables:DataTables, variables:Dict):
+def make_dynamodb_data(config_path:str, tables:DataTables, variables:Dict):
 
     #-------------------------------------
     #   設定読み込み
     #-------------------------------------
 
     # dynamodb 設定を取得
-    dynamodb_configs:List[Dict] = job_common.import_config_attr(config_name=system_name, attr_name="dynamodb_configs")
+    dynamodb_configs:List[Dict] = job_common.import_config_attr(config_name=config_path, attr_name="dynamodb_configs")
 
 
     #-------------------------------------

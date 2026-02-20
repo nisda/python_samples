@@ -1,5 +1,5 @@
 from typing import Dict, List
-from models.ExcelTable.ExcelTable import DataTables
+from .models.ExcelTable.ExcelTable import DataTables
 
 
 def make_error_info_from_tables(tables:DataTables) -> List[Dict]:
