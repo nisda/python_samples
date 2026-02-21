@@ -9,7 +9,7 @@ import re
 logger = logging.getLogger(__name__)
 
 
-def workflow(excel_path:str|BytesIO, config_path:str, variables:Dict[str, Any]={}):
+def workflow(excel_path:str|BytesIO, config_path:str, variables:Dict[str, Any]={}, converters:Dict[str, callable]={}):
     # データ調整
     config_lib_path:str = re.sub(pattern=r'/|\\', repl=".",string=config_path).lstrip(".")
 
@@ -20,6 +20,7 @@ def workflow(excel_path:str|BytesIO, config_path:str, variables:Dict[str, Any]={
     ret = job_excel.load_and_convert(
         config_path=config_lib_path,
         excel_file=excel_path,
+        converters=converters,
     )
     logger.debug(ret)
 

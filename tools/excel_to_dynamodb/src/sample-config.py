@@ -28,9 +28,12 @@ load_configs:dict = [
             "TBL_A": {
                 "data_attr": {
                     "system-name" : {},
-                    "config1.category" : { "convert" : { "type":"ABC.Category" } },
-                    "config1.type" : { "convert": { "type":"ABC.Type" } },
-                    "config1.user" : { "convert": { "type":"ABC.User" } },
+                    # "config1.category" : { "convert" : { "type":"ABC.Category" } },
+                    # "config1.type" : { "convert": { "type":"ABC.Type" } },
+                    # "config1.user" : { "convert": { "type":"ABC.User" } },
+                    "config1.category" : { "convert" : { "name":"ABC.Category" } },
+                    "config1.type" : { "convert": { "name":"ABC.Type" } },
+                    "config1.user" : { "convert": { "name":"ABC.User" } },
                     "monitoring.use" : {},
                     "monitoring.week" : { "convert_type": None},
                 },

@@ -4,6 +4,10 @@ import logging
 from io import BytesIO
 from excel_to_dynamodb.workflow import workflow
 
+from converter import ABC
+
+
+
 logger = logging.getLogger(__name__)
 logging.basicConfig(
     filename=None,
@@ -24,6 +28,19 @@ VARIAVLES = {
 def lambda_handler(event, context):
     logger.info(f"event = {event}")
 
+    #---------------------------------
+    # Conveters
+    #---------------------------------
+    converters = {
+        "ABC.Category": ABC.Category(add_str="@conv").converter,
+        "ABC.User": ABC.User(add_str="@conv").converter,
+        "ABC.Type": ABC.Type(add_str="@conv").converter,
+    }
+
+    #---------------------------------
+    # Excelファイル
+    #---------------------------------
+
     # 入力パターンA
     excel_path = INPUT_EXCEL_PATH
 
@@ -32,12 +49,15 @@ def lambda_handler(event, context):
         bytes_io_obj = BytesIO(f.read())
 
 
+    #---------------------------------
     # 実行
+    #---------------------------------
     ret = workflow(
         # excel_path=excel_path,
         excel_path=bytes_io_obj,
         config_path=CONFIG_PATH,
         variables=VARIAVLES,
+        converters=converters,
     )
 
     # 結果

@@ -4,6 +4,7 @@ import re
 import datetime
 import logging
 import json
+import importlib
 
 from .utils import master_data as MasterData
 from .models.ExcelTable.ExcelTable import DataTables
@@ -16,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 
-def load_and_convert(config_path:str, excel_file:str):
+def load_and_convert(config_path:str, excel_file:str, converters:Dict[str, callable]):
 
     #-------------------------------------
     #   データ読み込み
@@ -46,7 +47,8 @@ def load_and_convert(config_path:str, excel_file:str):
 
 
     # コンバート処理
-    tables.map(func=_data_convert)
+    # tables.map(func=_data_convert)
+    tables.map(func=lambda **kwargs: _data_convert(converters=converters, **kwargs))
     logger.debug(f"tables@convert:\n{json.dumps(tables.serialize(), indent=2, ensure_ascii=False)}")
 
     # エラー処理
@@ -133,17 +135,24 @@ def _data_cleansing(value, type, required, **kwargs) -> Any:
     return value
 
 
-def _data_convert(value:Any, convert:Dict = {}, **kwargs) -> Any:
+def _data_convert(converters:Dict[str, callable], value:Any, convert:Dict = {}, **kwargs) -> Any:
     # convert が empty であったら何もしない
     if not bool(convert):
         return value
 
-    # value が empty であったら何もしない
-    if not bool(value):
-        return value
-
+    # # value が empty であったら何もしない
+    # if not bool(value):
+    #     return value
     # 変換処理
-    ret =  MasterData.get_id(convert_type=convert["type"], value=value)
+    # ret =  MasterData.get_id(convert_type=convert["type"], value=value)
+
+    # # 変換処理
+    # mod_paths:List[str] = convert["name"].split(".")
+
+    # conv_mod = importlib.import_module(".".join(mod_paths[:-1]))
+    # conv_func:callable = getattr(conv_mod, mod_paths[-1])
+    conv_func = converters[convert["name"]]
+    ret = conv_func(value, **kwargs)
 
     # 返却
     return ret
