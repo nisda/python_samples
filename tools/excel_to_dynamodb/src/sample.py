@@ -32,9 +32,11 @@ def lambda_handler(event, context):
     # Conveters
     #---------------------------------
     converters = {
-        "ABC.Category": ABC.Category(add_str="@conv").converter,
-        "ABC.User": ABC.User(add_str="@conv").converter,
-        "ABC.Type": ABC.Type(add_str="@conv").converter,
+        "ABC.Category": ABC.Category(add_str="@conv", auto_register=True).converter,
+        "ABC.User": ABC.User(add_str="@conv", auto_register=False).converter,
+        "ABC.Status": ABC.Status(add_str="@conv", auto_register=True).converter,
+        "ABC.Priority": ABC.Priority(add_str="@conv", auto_register=False).converter,
+        "ABC.Type": ABC.Type(add_str="@conv", auto_register=True).converter,
     }
 
     #---------------------------------
