@@ -21,6 +21,7 @@ INPUT_EXCEL_PATH = "./sample.xlsx"
 CONFIG_PATH = "./sample-config"
 VARIAVLES = {
     "prefix" : os.getenv("PREFIX", "dev-xxx"),
+    "system_name" : "ABC-Sys",
     "tenant_id" : "000001-001",
 }
 

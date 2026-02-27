@@ -4,7 +4,7 @@ from ._base import ABCConverterBase
 
 
 _INIT_VALUES = [
-    # {"id" : "u1", "name" : "xxx@xxx.xxx"},
+    {"id" : "u1", "name" : "xxx@xxx.xxx"},
     {"id" : "u2", "name" : "yyy@yyy.yyy"},
     {"id" : "u3", "name" : "zzz@zzz.zzz"},
 ]

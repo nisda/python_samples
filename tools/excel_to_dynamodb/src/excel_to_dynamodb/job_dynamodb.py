@@ -105,7 +105,7 @@ def _make_records_for_dynamodb(
         logger.debug(f"records@custom: [0] = {json.dumps(work_records[0], indent=2, ensure_ascii=False)}")
 
     # テーブルを階層化＆ ChainabledDict に変換
-    work_records = [
+    records_for_assign = [
         ChainableDict(dict_util.from_flatten(record))
         for record in work_records
     ]
@@ -113,13 +113,16 @@ def _make_records_for_dynamodb(
     if len(work_records) > 0:
         logger.debug(f"records@chained: [0] = {json.dumps(work_records[0], indent=2, ensure_ascii=False)}")
 
+    # 変数を ChainabledDict に変換
+    variables_for_assign:ChainableDict = ChainableDict(variables)
+
     # template に割り当て
     work_records = [
         dict_util.map_recursive(
             data = data_template,
-            func = lambda x: format_ex(format=x, **{"source": record, "var": variables, })
+            func = lambda x: format_ex(format=x, **{"source": record, "var": variables_for_assign, })
         )
-        for record in work_records
+        for record in records_for_assign
     ]
     logger.debug(f"records@templated: counts={len(work_records)}")
 

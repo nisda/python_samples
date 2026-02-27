@@ -75,6 +75,7 @@ dynamodb_configs:List[Dict] = [
         },
         # 登録データテンプレート
         "template" : {
+            "system_name" : "{var.system_name}",
             "tenant_id" : "{source.tenant_id}",
             "config1" : {
                 "category" : "{source.config1.category}",
