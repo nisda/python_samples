@@ -49,6 +49,10 @@ def make_dynamodb_data(config_path:str, tables:DataTables, variables:Dict):
             format=dynamodb_config["table_name"],
             **{"var": ChainableDict(variables)},
         )
+        dynamodb_config["table_region"] = format_ex(
+            format=dynamodb_config.get("table_region", None),
+            **{"var": ChainableDict(variables)},
+        )
 
     return {
         "dynamodb_infos": dynamodb_configs,
@@ -138,9 +142,11 @@ def register_to_dynamodb(dynamodb_infos:List[Dict]) -> Dict[str, List[Dict]]:
     results = []
     for dynamodb_info in dynamodb_infos:
         table_name:str = dynamodb_info["table_name"]
-        pre_delete:Dict = dynamodb_info.get("pre-delete")
+        table_region:str = dynamodb_info.get("table_region", None)
+        pre_delete:Dict = dynamodb_info.get("pre-delete", None)
         records:List[Dict] = dynamodb_info["records"]
         logger.debug(f"table_name: {table_name}")
+        logger.debug(f"table_region: {table_region}")
         logger.debug(f"pre_delete: {pre_delete}")
         logger.debug(f"records: count={len(records)}")
 
@@ -149,7 +155,7 @@ def register_to_dynamodb(dynamodb_infos:List[Dict]) -> Dict[str, List[Dict]]:
         continue
 
         # 更新処理
-        table_handler:Table = Table(table_name=table_name, region_name=None)
+        table_handler:Table = Table(table_name=table_name, region_name=table_region)
         ret = table_handler.delete_upsert(
             UpdateItems=records,
             IndexName=pre_delete.get("index",None),

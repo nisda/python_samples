@@ -67,6 +67,7 @@ load_configs:dict = [
 dynamodb_configs:List[Dict] = [
     {
         "table_name": "{var.prefix}-basic-config",
+        "table_region": "{var.region}",
         "source" : "TBL_A",
         # 登録前削除設定。
         "pre-delete" : {
