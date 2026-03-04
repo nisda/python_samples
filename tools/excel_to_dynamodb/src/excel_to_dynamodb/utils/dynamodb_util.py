@@ -285,7 +285,7 @@ class Table:
         search_index_defs: Dict[str,str]
         if IndexName is None:
             # IndexName指定がない場合はプライマリを使用。
-            search_index_defs = pri_index_keys
+            search_index_defs = primary_index_defs
         else:
             # INDEX情報を取得。INDEX非存在時はエラー
             index_temp: Dict[str, Any] = self.index(IndexName=IndexName)

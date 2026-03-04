@@ -299,11 +299,13 @@ class DataTables(List[DataTable]):
 
         for load_config in load_configs:
             # シート名を取得
-            sheetname_pattern:str = load_config["sheetname"]
-            sheetname_regex = sheetname_pattern.replace("*", r"(.*)")
+            sheetname_def:str|re.Pattern = load_config["sheetname"]
+            sheetname_regex:re.Pattern = \
+                sheetname_def if isinstance(sheetname_def, re.Pattern) \
+                else re.compile(sheetname_def.replace("*", r"(.*)"))
             sheetnames:List[str] = [
                 x for x in wb.sheetnames
-                if re.fullmatch(sheetname_regex, x)
+                if sheetname_regex.fullmatch(x)
             ]
 
             # シート＋テーブル定義ごとに読み込み

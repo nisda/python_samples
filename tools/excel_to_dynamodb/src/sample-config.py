@@ -1,4 +1,5 @@
 from typing import Dict,List,Any
+import re
 
 # カスタムファンクション：weekデータ生成
 def custom_make_records_for_week(records:List[Dict[str, Any]], variables:Dict) -> List[Dict]:
@@ -23,7 +24,8 @@ def custom_make_records_for_week(records:List[Dict[str, Any]], variables:Dict) -
 # 読み込み設定
 load_configs:dict = [
     {
-        "sheetname" : "縦並び複数件*",
+        # "sheetname" : "縦並び複数件*",            # str もあり。ワイルドカード(*)可
+        "sheetname" : re.compile("(.*)び(.*)"),     # re.Pattern も可
         "tables" : {
             "TBL_A": {
                 "data_attr": {
@@ -72,7 +74,9 @@ dynamodb_configs:List[Dict] = [
         # 登録前削除設定。
         "pre-delete" : {
             "index" : None,
-            "keys" : ["system_id", "number"],
+            "keys" : {
+                "system_id": "{var.system_name}",
+            },
         },
         # 登録データテンプレート
         "template" : {
@@ -93,6 +97,13 @@ dynamodb_configs:List[Dict] = [
         "source" : "TBL_A",
         # レコード処理のカスタム関数
         "function" : custom_make_records_for_week,
+        # 事前削除
+        "pre-delete" : {
+            "index" : None,
+            "keys" : {
+                "tenant_id": "{source.system_name}",
+            },
+        },
         # 登録データテンプレート
         "template" : {
             "tenant_id"   : "{source.tenant_id}",

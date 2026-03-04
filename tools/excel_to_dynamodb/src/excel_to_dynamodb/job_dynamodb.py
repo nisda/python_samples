@@ -136,14 +136,14 @@ def _make_records_for_dynamodb(
 
 
 
-def register_to_dynamodb(dynamodb_infos:List[Dict]) -> Dict[str, List[Dict]]:
+def register_to_dynamodb(dynamodb_infos:List[Dict], variables:Dict) -> Dict[str, List[Dict]]:
     logger.debug(f"dynamodb_records: {len(dynamodb_infos)}")
 
     results = []
     for dynamodb_info in dynamodb_infos:
         table_name:str = dynamodb_info["table_name"]
         table_region:str = dynamodb_info.get("table_region", None)
-        pre_delete:Dict = dynamodb_info.get("pre-delete", None)
+        pre_delete:Dict = dynamodb_info.get("pre-delete", {})
         records:List[Dict] = dynamodb_info["records"]
         logger.debug(f"table_name: {table_name}")
         logger.debug(f"table_region: {table_region}")
@@ -151,11 +151,24 @@ def register_to_dynamodb(dynamodb_infos:List[Dict]) -> Dict[str, List[Dict]]:
         logger.debug(f"records: count={len(records)}")
 
 
+        # 更新処理
+        pre_delete_index:str = pre_delete.get("index", None)
+        pre_delete_keys:Dict = pre_delete.get("keys", None)
+        table_handler:Table = Table(table_name=table_name, region_name=table_region)
+
+        # レコード0件時は変数のみの条件で削除実行
+        if len(records) == 0:
+            pre_delete_keys = {
+                k: format_ex(v, var=variables)
+                for k,v in pre_delete_keys.items()
+            }
+            table_handler.delete_items(Items=pre_delete_keys)
+            return {}
+
         # テストのため更新処理スキップ
         continue
 
         # 更新処理
-        table_handler:Table = Table(table_name=table_name, region_name=table_region)
         ret = table_handler.delete_upsert(
             UpdateItems=records,
             IndexName=pre_delete.get("index",None),

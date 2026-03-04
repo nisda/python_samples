@@ -50,7 +50,8 @@ def workflow(excel_path:str|BytesIO, config_path:str, variables:Dict[str, Any]={
     # 登録
     logger.info("[job_dynamodb.register_to_dynamodb]")
     ret = job_dynamodb.register_to_dynamodb(
-        dynamodb_infos=ret["dynamodb_infos"]
+        dynamodb_infos=ret["dynamodb_infos"],
+        variables=variables,
     )
     logger.debug(ret)
 
