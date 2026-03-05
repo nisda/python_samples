@@ -54,6 +54,11 @@ def map_recursive(data:dict, func:callable):
             k: map_recursive(v, func)
             for k,v in data.items()
         }
+    if isinstance(data, list):
+        return [
+            map_recursive(v, func)
+            for v in data
+        ]
     else:
         return func(data)
 
