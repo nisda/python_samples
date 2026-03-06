@@ -3,6 +3,7 @@ import sys
 from pprint import pprint
 from datetime import datetime
 import time
+from zoneinfo import ZoneInfo
 
 """
 本来はUnitTestの中でテーブル作成も行うべきであるが、今回は省略する。
@@ -20,7 +21,7 @@ def test_updated_at():
     item = {'pk': 'ut_put', 'sk': 'updated_at', 'biko': ''}
     ret = table.put_item(item=item)
 
-    now_ymd = datetime.now().strftime("%Y-%m-%d")
+    now_ymd = datetime.now(ZoneInfo("Asia/Tokyo")).strftime("%Y-%m-%d")
     updated_at:str|None = ret.pop("_updated_at", None)
 
     assert updated_at is not None
@@ -30,7 +31,7 @@ def test_updated_at():
 
 
 def test_updated_at_none():
-    table:dynamodb_util.Table = dynamodb_util.Table(table_name=TABLE_NAME, updated_at=None)
+    table:dynamodb_util.Table = dynamodb_util.Table(table_name=TABLE_NAME, updated_at_attr=None)
     item = {'pk': 'ut_put', 'sk': 'updated_at_none', 'biko': ''}
     ret = table.put_item(item=item)
 

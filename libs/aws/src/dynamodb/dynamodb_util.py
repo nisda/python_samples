@@ -1,12 +1,13 @@
-from typing import List, Dict, Any, Union, Optional, Tuple
-import boto3.dynamodb
+from typing import List, Dict, Any, Union, Optional, Tuple, Self
 from boto3.dynamodb.types import TypeSerializer, TypeDeserializer, Binary
 import boto3
 import boto3.session
-from collections.abc import Generator, Iterator
+from collections.abc import Iterator
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from boto3.dynamodb.conditions import AttributeBase, Key, Attr, Or, And, Not
 from botocore.exceptions import ClientError
+from enum import Enum
 
 # boto3.dynamodb.types.Binary -> bytes
 def __convert_binary_to_bytes(item:Union[Binary, List, Dict, Any]):
@@ -74,26 +75,184 @@ def make_update_expression(
     }
 
 
+class IndexTypes(Enum):
+    Primary = "PrimaryIndex"
+    LSI = "LocalSecondaryIndex"
+    GSI = "GlobalSecondaryIndex"
+
+class Index:
+
+    @property
+    def table(self) -> object:
+        return self._table
+
+    @property
+    def name(self) -> str|None:
+        return self._name
+
+    @property
+    def type(self) -> IndexTypes:
+        return self._type
+
+    @property
+    def hash_keys(self) -> List[str]:
+        return self._hash_keys
+
+    @property
+    def range_keys(self) -> List[str]:
+        return self._range_keys
+
+    def __init__(self:Self, table:object, name:str|None, type:IndexTypes, hash_keys:List[str], range_keys:List[str]):
+        self._table:object          = table
+        self._name:str|None         = name
+        self._type:IndexTypes       = type
+        self._hash_keys:List[str]    = hash_keys
+        self._range_keys:List[str]   = range_keys
+
+    def containing_keys(self, search_keys:List[str], range_compare_key:str=None) -> None|Dict[str, List[str]]:
+        """含有キー取得（キー項目一致判定）"""
+
+        # HASH キーは全て含まれている必要あり
+        if not all(k in search_keys for k in self.hash_keys):
+            return None
+
+        if range_compare_key:
+            # range_key が指定されている場合は
+            # range_key とそれより前方のキーをすべて含む必要あり。
+
+            # range_key を含んでいないときは不一致
+            if not range_compare_key in self.range_keys:
+                return None
+
+            # INDEXの RANGE-KEY を、指定 range_key の前方と後方に分割
+            range_key_idx:int = self.range_keys.index(range_compare_key)
+            keys_left:List[str] = self._range_keys[:range_key_idx]
+
+            if all(k in search_keys for k in keys_left):
+                # 前方のキーをすべて含んでいればOK
+                return {
+                    "HASH" : self.hash_keys,
+                    "RANGE" : [*keys_left, range_compare_key],
+                }
+            else:
+                # 含んでいなければNG       
+                return None
+
+        else:
+            # range_key が指定されていない場合は
+            # RANGE-KEY を前から順に走査し、検索キーに含まれている分だけ取得
+
+            keys_left:List[str] = []
+            for k in self.range_keys:
+                if k in search_keys:
+                    keys_left.append(k)
+                else:
+                    # 非含有キーに達したら終了
+                    break
+            return {
+                "HASH"  : self.hash_keys,
+                "RANGE" : keys_left,
+            }
+
+
+    def query(self, items: Dict[str, Any], **kwargs:Dict[str, Any]) -> Iterator[Dict[str, Any]]:
+        #-----------------------------------------
+        #   事前チェック
+        #-----------------------------------------
+
+        # index対象チェック
+        containing_keys = self.containing_keys(search_keys=items.keys(), range_compare_key=None)
+        if containing_keys is None:
+            raise ValueError("No match on INDEX.")
+
+        #-----------------------------------------
+        #   条件生成
+        #-----------------------------------------
+
+        # 比較item を Key と Filter に振り分け
+        containing_keys_flat: List[str] = [ y for x in containing_keys.values() for y in x ]
+        key_items:Dict[str, Any] = { k:v for k,v in items.items() if k in  containing_keys_flat }
+        filter_items:Dict[str, Any] = { k:v for k,v in items.items() if k not in containing_keys_flat }
+
+        # KeyCondition を生成する
+        # FilterCondition を生成する
+        index_condition :AttributeBase = self.__make_condition_eq(keys=key_items, type=Key)
+        filter_condition:AttributeBase = self.__make_condition_eq(keys=filter_items, type=Attr)
+
+        #-----------------------------------------
+        #   debug出力
+        #-----------------------------------------
+        # print("*******************************")
+        # print(f"index={self.name}")
+        # print(f"key_items={key_items}")
+        # print(f"filter_items={filter_items}")
+
+
+        #-----------------------------------------
+        #   検索実行
+        #-----------------------------------------
+
+        # パラメータ調整
+        params: Dict = {
+            k:v
+            for k,v in {
+                "IndexName" : self.name,
+                "KeyConditionExpression" : index_condition,
+                "FilterExpression" : filter_condition,
+            }.items()
+            if v
+        }
+
+        # 実行（iterator）
+        while True:
+            response = self._table.query(**kwargs, **params)
+            for item in response['Items']:
+                yield item
+            if 'LastEvaluatedKey' not in response:
+                break
+            kwargs.update(ExclusiveStartKey=response['LastEvaluatedKey'])
+
+
+    def __make_condition_eq(self, keys:Dict[str, Any], type:Key|Attr, operator:And|Or=And) -> AttributeBase:
+        """
+        Key/Filterの条件リソースインタフェースを生成  
+        """
+
+        ret = None
+        for k,v in keys.items():
+            if ret is None:
+                ret = type(k).eq(v)
+            else:
+                # ret = ret & type(k).eq(v)
+                ret = operator(ret, type(k).eq(v))
+        return ret
+
+
+
+
+
 class Table:
     _table = None
-    _pk_schema:Dict[str, str] = None
-    _gsi_schemas:Dict[str, Dict[str, str]] = None
-    _lsi_schemas:Dict[str, Dict[str, str]] = None
+    _pk:Index = None
+    _gsi:Dict[str, Index] = None
+    _lsi:Dict[str, Index] = None
     _ttl_name:Optional[str] = None
     _ttl_default:int = 0
-    _updated_at:Optional[str] = None
+    _updated_at_attr:Optional[str] = None
+    _time_zone:str = None
+
 
     @property
-    def pk_schema(self) -> Dict[str, str]:
-        return self._pk_schema
+    def pk(self) -> Index:
+        return self._pk
 
     @property
-    def gsi_schemas(self) -> Dict[str, Dict[str, str]]:
-        return self._gsi_schemas
+    def gsi(self) -> Dict[str, Index]:
+        return self._gsi
 
     @property
-    def lsi_schemas(self) -> Dict[str, Dict[str, str]]:
-        return self._lsi_schemas
+    def lsi(self) -> Dict[str, Index]:
+        return self._lsi
 
     @property
     def ttl_name(self) -> Optional[str]:
@@ -104,65 +263,144 @@ class Table:
         return self._ttl_default
 
     @property
-    def updated_at(self) -> Optional[str]:
-        return self._updated_at
+    def updated_at_attr(self) -> Optional[str]:
+        return self._updated_at_attr
 
+    @property
+    def time_zone(self) -> Optional[str]:
+        return self._time_zone
 
 
     def __init__(
-            self,table_name:str,
+            self,
+            table_name:str,
             region_name:str = None,
             session:boto3.session.Session = None,
             ttl_default:int|datetime = 0,
-            updated_at:Optional[str] = "_updated_at",
+            updated_at_attr:Optional[str] = "_updated_at",
+            time_zone:str = "Asia/Tokyo"
         ):
         """コンストラクタ"""
 
+        def __divide_key_schemas(schemas) -> Dict[str, List[str]]:
+            """スキーマ定義を HASH と RANGE に分離"""
+            hash_keys:List[str] = []
+            range_keys:List[str] = []
+            for schema in schemas:
+                key_type:str = schema["KeyType"]
+                attr_name:str = schema["AttributeName"]
+                if key_type.upper() == "HASH":
+                    hash_keys.append(attr_name)
+                elif key_type.upper() == "RANGE":
+                    range_keys.append(attr_name)
+            return {
+                "HASH": hash_keys,
+                "RANGE": range_keys
+            }
+
         # session 取得
-        if session is None:
-            session = boto3.Session(region_name=region_name)
+        session = session if session else boto3.Session(region_name=region_name)
 
         # client/resource 取得
         dynamodb_cli = session.client('dynamodb', region_name=region_name)
         dynamodb_rsc = session.resource('dynamodb', region_name=region_name)
+
+        # Tableリソース取得
         self._table = dynamodb_rsc.Table(table_name)
 
 
         # PrimaryKey
-        self._pk_schema = { x["KeyType"]:x["AttributeName"] for x in self._table.key_schema }
+        pk_schemas = __divide_key_schemas(schemas=self._table.key_schema)
+        self._pk = Index(
+            table = self._table,
+            name = None,
+            type = IndexTypes.Primary,
+            hash_keys  = pk_schemas["HASH"],
+            range_keys = pk_schemas["RANGE"],
+        )
 
         # GlobalSecondaryIndex
-        self._gsi_schemas = {}
-        for idx_info in self._table.global_secondary_indexes or []:
+        self._gsi = {}
+        for idx_info in sorted(self._table.global_secondary_indexes, key=lambda x: x["IndexName"]):
             idx_name:str = idx_info["IndexName"]
-            self._gsi_schemas[idx_name] = {
-                x["KeyType"]:x["AttributeName"]
-                for x in idx_info["KeySchema"]
-            }
+            idx_schemas:Dict = __divide_key_schemas(schemas=idx_info["KeySchema"])
+            self._gsi[idx_name] = Index(
+                table=self._table,
+                name=idx_name,
+                type=IndexTypes.GSI,
+                hash_keys  = idx_schemas["HASH"],
+                range_keys = idx_schemas["RANGE"],
+            )
 
         # LocalSecondaryIndex
-        self._lsi_schemas = {}
-        for idx_info in self._table.local_secondary_indexes or []:
+        self._lsi = {}
+        for idx_info in sorted(self._table.local_secondary_indexes, key=lambda x: x["IndexName"]):
             idx_name:str = idx_info["IndexName"]
-            self._lsi_schemas[idx_name] = {
-                x["KeyType"]:x["AttributeName"]
-                for x in idx_info["KeySchema"]
-            }
-
+            idx_schemas:Dict = __divide_key_schemas(schemas=idx_info["KeySchema"])
+            self._lsi[idx_name] = Index(
+                table=self._table,
+                name=idx_name,
+                type=IndexTypes.LSI,
+                hash_keys  = idx_schemas["HASH"],
+                range_keys = idx_schemas["RANGE"],
+            )
 
         # ttl
-        response = dynamodb_cli.describe_time_to_live(
-            TableName=table_name
-        )
+        response = dynamodb_cli.describe_time_to_live(TableName=table_name)
         self._ttl_name = response.get("TimeToLiveDescription", {}).get("AttributeName", None)
         self._ttl_default = ttl_default
 
         # 更新日時name
-        self._updated_at = updated_at
+        self._updated_at_attr = updated_at_attr
+        self._time_zone       = time_zone or "Asia/Tokyo"
 
 
+    def get_best_index(self, search_keys:List[str], range_compare_key:str=None) -> Index|None:
+        """指定キー項目に適合するINDEXを取得"""
 
-    def scan(self, **kwargs) -> Iterator:
+        def __calc_sort_priority(index_pair:Tuple[Index, Dict[str, List[str]]]) -> Tuple:
+            """ソート優先度の算出関数"""
+            idx:Index                    = index_pair[0]
+            key_def:Dict[str, List[str]] = index_pair[1]
+            return (
+                len(key_def["HASH"]) * -1,
+                len(key_def["RANGE"]) * -1,
+                { IndexTypes.Primary: 1, IndexTypes.LSI: 2, IndexTypes.GSI: 3}[idx.type],
+                str(idx.name),
+            )
+
+        # Check argument 
+        if not search_keys:
+            raise ValueError("arg:search_keys is empty.")
+
+        # #----------------------------------
+        # # Primary に合致するならそれが最優先
+        # #----------------------------------
+        # if self.pk.containing_keys(search_keys=search_keys, range_compare_key=range_compare_key):
+        #     return self.pk
+
+        #-------------------------------
+        # LSI & GSIはマッチする RANGE-KEY の数が多いものを返却
+        #-------------------------------
+
+        # マッチするキー情報を取得
+        matched_indexes:List[Tuple[Index, Dict[str, List[str]]]] = []
+        for idx in [self.pk, *self.lsi.values(), *self.gsi.values()]:
+            key_info = idx.containing_keys(search_keys=search_keys, range_compare_key=range_compare_key)
+            if key_info:
+                matched_indexes.append((idx, key_info))
+
+        # マッチなしは None を返却
+        if len(matched_indexes) == 0:
+            return None
+
+        # RANGE-KEYの数で逆順ソートして返却
+        # sorted_indexes:List[Index] = sorted(matched_indexes, key=lambda tpl: len(tpl[1]["RANGE"]) * -1 )
+        sorted_indexes:List[Index] = sorted(matched_indexes, key=__calc_sort_priority )
+        return sorted_indexes[0][0]
+
+
+    def scan(self, **kwargs) -> Iterator[Dict[str, Any]]:
         while True:
             response = self._table.scan(**kwargs)
             for item in response['Items']:
@@ -172,7 +410,7 @@ class Table:
             kwargs.update(ExclusiveStartKey=response['LastEvaluatedKey'])
 
 
-    def query(self, KeyConditionExpression, IndexName:str=None, **kwargs) -> Iterator:
+    def query(self, KeyConditionExpression, IndexName:str=None, **kwargs) -> Iterator[Dict[str, Any]]:
 
         # required
         kwargs.update(KeyConditionExpression=KeyConditionExpression)
@@ -190,85 +428,20 @@ class Table:
             kwargs.update(ExclusiveStartKey=response['LastEvaluatedKey'])
 
 
-    def query2(self, key:Dict[str, Any], index_name:str=None, **kwargs) -> Iterator:
-
-        #-----------------------------------------
-        #   INDEX の情報を取得
-        #-----------------------------------------
-        search_index_defs: Dict[str,str]
-        if index_name is None:
-            # IndexName指定がない場合はプライマリを使用。
-            search_index_defs = self.pk_schema
-        else:
-            # INDEX情報を取得。INDEX非存在時はエラー
-            search_index_defs: Dict[str, Any] = \
-                self.gsi_schemas.get(index_name, None) or \
-                self.lsi_schemas.get(index_name, None)
-            if search_index_defs is None:
-                raise NameError(f"Index `{index_name}` does not exist.")
-
-        #-----------------------------------------
-        #   比較キーの生成
-        #-----------------------------------------
-        # KeyNames の振り分け
-        key_names:List[str] = key.keys()
-        index_key_names:List[str] = []   # KeyCondition用
-        filter_key_names:List[str] = []  # Filter用
-
-        # Hashキーが含まれていなかったらエラー
-        if search_index_defs["HASH"] not in key_names:
-            raise ValueError(f"HASH-KEY `{search_index_defs['HASH']}` is required for 'key'.")
-        index_key_names  = [ x for x in key_names if x in search_index_defs.values() ]
-        filter_key_names = [ x for x in key_names if x not in search_index_defs.values() ]
-
-
-        #-----------------------------------------
-        #   検索条件を生成
-        #-----------------------------------------
-
-        # 検索キーを index と filter に振り分け
-        search_keys: Dict =  {
-            "index_keys"  : { k: key.get(k, None) for k in index_key_names},
-            "filter_keys" : { k: key.get(k, None) for k in filter_key_names},
-        }
-
-        # Conditionオブジェクトに変換
-        index_keys :AttributeBase = self.__make_key_condition(keys=search_keys["index_keys"], type=Key)
-        filter_keys:AttributeBase = self.__make_key_condition(keys=search_keys["filter_keys"], type=Attr)
-
-        #-----------------------------------------
-        #   検索実行
-        #-----------------------------------------
-
-        # パラメータ調整
-        params: Dict = {
-            k:v
-            for k,v in {
-                "IndexName" : index_name,
-                "KeyConditionExpression" : index_keys,
-                "FilterExpression" : filter_keys,
-            }.items()
-            if v
-        }
-
-        # 実行（iterator）
-        while True:
-            response = self._table.query(**kwargs, **params)
-            for item in response['Items']:
-                yield item
-            if 'LastEvaluatedKey' not in response:
-                break
-            kwargs.update(ExclusiveStartKey=response['LastEvaluatedKey'])
-
+    def query2(self, key_items:Dict[str, Any], **kwargs) -> Iterator[Dict[str, Any]]:
+        idx:Index = self.get_best_index(search_keys=key_items.keys(), range_compare_key=None)
+        if idx is None:
+            raise ValueError("No index that matches the key_items.")
+        return idx.query(key_items)
 
 
     def get_item(self, key:Dict[str,Any], **kwargs):
         # キーのみ抽出
-        key_names:str = self._pk_schema.values()
-        get_key:Dict[str, Any] = { k:v for k,v in key.items() if k in key_names }
+        key_names:str = self.pk.hash_keys + self.pk.range_keys
+        get_keys:Dict[str, Any] = { k:v for k,v in key.items() if k in key_names }
 
         response = self._table.get_item(
-            Key=get_key,
+            Key=get_keys,
             **kwargs
         )
         ret = response["Item"]
@@ -281,8 +454,8 @@ class Table:
         temp_item:Dict[str, Any] = self._set_additional_attr(item=item, ttl=ttl)
 
         # キーを抽出
-        key_names:str = self._pk_schema.values()
-        upsert_key:Dict[str, Any] = { k:v for k,v in item.items() if k in key_names }
+        key_names:str = self.pk.hash_keys + self.pk.range_keys
+        upsert_keys:Dict[str, Any] = { k:v for k,v in item.items() if k in key_names }
 
         # 上書き不可：データ非存在を条件に追加
         if not overwrite:
@@ -291,7 +464,7 @@ class Table:
 
             # データ非存在条件を生成
             # condition_exists= Not(self.__make_key_condition(keys=upsert_key, type=Key, operator=And))
-            condition_exists = Not(self.__join_conditions(And, [Key(k).eq(v) for k,v in upsert_key.items()]))
+            condition_exists = Not(self.__join_conditions(And, [Key(k).eq(v) for k,v in upsert_keys.items()]))
 
             # TTL条件を生成
             condition_ttl = None if self.ttl_name is None else (
@@ -339,7 +512,7 @@ class Table:
         """データ削除"""
 
         # キーのみ抽出
-        key_names:str = self._pk_schema.values()
+        key_names:str = self.pk.hash_keys + self.pk.range_keys
         delete_key:Dict[str, Any] = { k:v for k,v in key.items() if k in key_names }
 
         # データ存在を条件に追加（返却値の分岐のため）
@@ -363,7 +536,7 @@ class Table:
         """データ削除（一括）"""
 
         # キー項目を抽出
-        key_names:str = self._pk_schema.values
+        key_names:str = self.pk.hash_keys + self.pk.range_keys
 
         # キー値のリストを生成
         delete_keys:List[Dict[str, Any]] = [ { k:v for k,v in x.items() if k in key_names } for x in keys ]
@@ -386,7 +559,7 @@ class Table:
         """データ更新"""
 
         # キー抽出
-        key_names:str = self._pk_schema.values
+        key_names:str = self.pk.hash_keys + self.pk.range_keys
         update_key:Dict[str, Any] = { k:v for k,v in key.items() if k in key_names }
 
         # 追加属性をセット
@@ -607,7 +780,7 @@ class Table:
         """データ全削除"""
 
         # キー項目を抽出
-        key_names:str = self._pk_schema.values()
+        key_names:str = self.pk.hash_keys + self.pk.range_keys
 
         # キー値のリストを生成
         delete_keys:dict = [ { k:v for k,v in x.items() if k in key_names } for x in self.scan() ]
@@ -622,14 +795,29 @@ class Table:
     def _set_additional_attr(self, item:Dict, ttl:int|datetime|None) -> Dict:
         """オプション属性追加"""
 
-        def __add_ttl(item:Dict, ttl:int|datetime|None) -> Dict:
+        def __add_updated_at(item:Dict, now_dt:datetime) -> Dict:
 
-            # 名称未設定はそのまま返却
-            if not self._ttl_name:
+            # 名所未設定の場合はそのまま返却
+            if not (self.updated_at_attr):
                 return item
 
             # item に設定済みの場合はそのまま返却
-            if self._ttl_name in item.keys():
+            if self.updated_at_attr in item.keys():
+                return item
+
+            # 追加して返却
+            item[self.updated_at_attr] = now_dt.isoformat()
+            return item
+
+
+        def __add_ttl(item:Dict, ttl:int|datetime|None, now_dt:datetime) -> Dict:
+
+            # 名称未設定はそのまま返却
+            if not self.ttl_name:
+                return item
+
+            # item に設定済みの場合はそのまま返却
+            if self.ttl_name in item.keys():
                 return item
 
             # 個別指定なし（None）の場合はデフォルト値を採用
@@ -648,28 +836,14 @@ class Table:
             # 追加して返却
             ttl_dt:datetime = ttl_tmp
             if isinstance(ttl_tmp, int):
-                ttl_dt = datetime.now() + timedelta(seconds=ttl_tmp)        
-            item[self._ttl_name] = int(ttl_dt.timestamp())
+                ttl_dt = now_dt + timedelta(seconds=ttl_tmp)        
+            item[self.ttl_name] = int(ttl_dt.timestamp())
             return item
 
-
-        def __add_updated_at(item:Dict) -> Dict:
-
-            # 名所未設定の場合はそのまま返却
-            if not (self._updated_at):
-                return item
-
-            # item に設定済みの場合はそのまま返却
-            if self._updated_at in item.keys():
-                return item
-
-            # 追加して返却
-            item[self._updated_at] = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
-            return item
-
-        # セットして返却
-        ret = __add_updated_at(item=item)
-        ret = __add_ttl(item=item, ttl=ttl)
+        # 追加属性をセットして返却
+        now_dt:datetime = datetime.now(ZoneInfo(self.time_zone))
+        ret = __add_updated_at(item=item, now_dt=now_dt)
+        ret = __add_ttl(item=item, ttl=ttl, now_dt=now_dt)
         return ret
 
 
@@ -693,16 +867,6 @@ class Table:
         """
         Docstring for __make_key_condition  
         Key/Filterの条件リソースインタフェースを生成  
-        
-        :param self: Description
-        :param keys: Description
-        :type keys: Dict[str, Any]
-        :param type: Description
-        :type type: Key | Attr
-        :param operator: Description
-        :type operator: And | Or
-        :return: Description
-        :rtype: AttributeBase
         """
 
         ret = None
@@ -713,7 +877,6 @@ class Table:
                 # ret = ret & type(k).eq(v)
                 ret = operator(ret, type(k).eq(v))
         return ret
-
 
 
     def __make_hashable(self, obj) -> Tuple[Any]:
