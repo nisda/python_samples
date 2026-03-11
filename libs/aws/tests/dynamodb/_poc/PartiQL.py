@@ -18,9 +18,9 @@ INSERT で上書きはできない。
 
 TABLE_NAME = "test-20260128"
 
-Statement1:str = "DELETE FROM \"test-20260128\" WHERE \"pk\" = 'partitionKeyValue' AND \"sk\" = 'sortKeyValue'"
-Statement2:str = "INSERT INTO \"test-20260128\" value {'pk': 'PartiQL', 'sk': 'Test2', '_updated_at': '" + datetime.now().isoformat() + "'}"
-#Statement1:str = "DELETE FROM \"test-20260128\" WHERE {'pk': 'PartiQL', 'sk': 'Test1' }"
+Statement1:str = "DELETE FROM \"test-20260128\" WHERE \"pk\" = 'PartiQL' AND \"sk\" = 'Test1'"
+# Statement2:str = "INSERT INTO \"test-20260128\" value {'pk': 'PartiQL', 'sk': 'Test1', '_updated_at': '" + datetime.now().isoformat() + "'}"  # 同じアイテムに対する処理は同じトランザクションではNG
+Statement3:str = "INSERT INTO \"test-20260128\" value {'pk': 'PartiQL', 'sk': 'Test2', '_updated_at': '" + datetime.now().isoformat() + "'}"  # これはキーが違うのでOK
 
 
 res = dynamodb_cli.execute_transaction(
@@ -29,7 +29,7 @@ res = dynamodb_cli.execute_transaction(
             "Statement": Statement1
         },
         {
-            "Statement": Statement2
+            "Statement": Statement3
         }
     ]
 )

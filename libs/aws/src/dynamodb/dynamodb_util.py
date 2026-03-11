@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Union, Optional, Tuple, Self
+from typing import List, Dict, Any, Union, Optional, Tuple, Self, overload
 from boto3.dynamodb.types import TypeSerializer, TypeDeserializer, Binary
 import boto3
 import boto3.session
@@ -102,6 +102,10 @@ class Index:
     def range_keys(self) -> List[str]:
         return self._range_keys
 
+    @property
+    def all_keys(self) -> List[str]:
+        return self._hash_keys + self._range_keys
+
     def __init__(self:Self, table:object, name:str|None, type:IndexTypes, hash_keys:List[str], range_keys:List[str]):
         self._table:object          = table
         self._name:str|None         = name
@@ -154,39 +158,111 @@ class Index:
                 "RANGE" : keys_left,
             }
 
+    @overload
+    def query(self, items:Dict[str, Any], **kwargs:Dict[str, Any]) -> Iterator[Dict[str, Any]]:
+        ...
 
-    def query(self, items: Dict[str, Any], **kwargs:Dict[str, Any]) -> Iterator[Dict[str, Any]]:
+    @overload
+    def query(self, items:List[Dict[str, Any]], **kwargs:Dict[str, Any]) -> Iterator[Dict[str, Any]]:
+        ...
+
+    def query(self, items:Union[Dict[str, Any], List[Dict[str, Any]]], **kwargs:Dict[str, Any]) -> Iterator[List[Dict[str, Any]]]:
         #-----------------------------------------
-        #   事前チェック
+        #   パラメータチェック＆調整
         #-----------------------------------------
+        if not items:
+            raise ValueError("Argument `items` is empty")
 
-        # index対象チェック
-        containing_keys = self.containing_keys(search_keys=items.keys(), range_compare_key=None)
-        if containing_keys is None:
-            raise ValueError("No match on INDEX.")
+        # 条件をリストに変換
+        if isinstance(items, dict):
+            items = [items]
 
-        #-----------------------------------------
-        #   条件生成
-        #-----------------------------------------
-
-        # 比較item を Key と Filter に振り分け
-        containing_keys_flat: List[str] = [ y for x in containing_keys.values() for y in x ]
-        key_items:Dict[str, Any] = { k:v for k,v in items.items() if k in  containing_keys_flat }
-        filter_items:Dict[str, Any] = { k:v for k,v in items.items() if k not in containing_keys_flat }
-
-        # KeyCondition を生成する
-        # FilterCondition を生成する
-        index_condition :AttributeBase = self.__make_condition_eq(keys=key_items, type=Key)
-        filter_condition:AttributeBase = self.__make_condition_eq(keys=filter_items, type=Attr)
+        # ユニーク化
+        items = self.__uniqueness_dict(dicts=items)
 
         #-----------------------------------------
-        #   debug出力
+        #   query条件生成
         #-----------------------------------------
-        # print("*******************************")
-        # print(f"index={self.name}")
-        # print(f"key_items={key_items}")
-        # print(f"filter_items={filter_items}")
 
+        # 全条件に共通するキーを取得
+        common_keys:List[str] = self.__extract_dict_common_keys(dicts=items)
+
+
+        # 共通キーをもとに検索キー項目を取得
+        search_keys = self.containing_keys(search_keys=common_keys, range_compare_key=None)
+        if not search_keys:
+            raise ValueError(f"No match on INDEX. {common_keys}")
+
+
+        # 検索キー項目を平坦化（一次元リスト化）
+        search_keys_flat: List[str] = [ y for x in search_keys.values() for y in x ]
+
+
+        # 指定された検索条件を Key/Filter に振り分け
+        query_items:List[Dict[str, Dict[str, Any]]]= [
+            {
+                "key_items" :  { k:v for k,v in item.items() if k in search_keys_flat },
+                "filter_items" :  { k:v for k,v in item.items() if k not in search_keys_flat },
+            }
+            for item in items
+        ]
+
+        # key_items でグループ化＆ソート
+        temp_items: Dict[Tuple, List] = {}
+        for x in query_items:
+            hash = self.__make_hashable(x["key_items"])
+            if hash in temp_items.keys():
+                temp_items[hash]["filter_items"].append(x["filter_items"])
+            else:
+                temp_items[hash] = {
+                    "key_items" : x["key_items"],
+                    "filter_items" : [ x["filter_items"] ],
+                }
+        grouped_items: List[Dict[str, List]] = [
+            temp_items[k] for k in sorted(temp_items.keys())
+        ]
+
+        #-----------------------------------------
+        #   query実行
+        #-----------------------------------------
+        for tmp_item in grouped_items:
+            ret_items = self.__query_one(key_item=tmp_item["key_items"], filter_items=tmp_item["filter_items"], **kwargs)
+            yield from ret_items
+
+        return
+
+
+
+
+    def __query_one(self, key_item:Dict[str, Any], filter_items:List[Dict[str, Any]], **kwargs:Dict[str, Any]) -> Iterator[List[Dict[str, Any]]]:
+        """
+        query実行(1条件)
+        """
+
+        #---------------------
+        # filter 調整
+        #---------------------
+
+        # 空の条件が含まれている場合は None にして条件を排除する。
+        # 他のfilter条件にも必ず合致することになり、それらが無意味になるため。
+        if {} in filter_items:
+            filter_items = []
+
+        #---------------------
+        # Conditionオブジェクトに変換
+        #---------------------
+
+        # Conditionオブジェクトに変換
+        key_condition       = self.__make_condition_eq(keys=key_item, type=Key, operator=And)
+
+        ## 最後に自力でfilterをかけるため不使用（コメントアウト）
+        # filter_conditsion   = self.__join_conditions(
+        #     operator=Or,
+        #     conditions=[
+        #         self.__make_condition_eq(keys=x, type=Attr, operator=And)
+        #         for x in filter_items
+        #     ]
+        # )
 
         #-----------------------------------------
         #   検索実行
@@ -197,8 +273,8 @@ class Index:
             k:v
             for k,v in {
                 "IndexName" : self.name,
-                "KeyConditionExpression" : index_condition,
-                "FilterExpression" : filter_condition,
+                "KeyConditionExpression" : key_condition,
+                # "FilterExpression" : filter_conditsion,
             }.items()
             if v
         }
@@ -207,10 +283,19 @@ class Index:
         while True:
             response = self._table.query(**kwargs, **params)
             for item in response['Items']:
-                yield item
+                if filter_items:
+                    for filter_item in filter_items:
+                        if filter_item.items() <= item.items():
+                            yield item
+                            break
+                else:
+                    yield item
+
             if 'LastEvaluatedKey' not in response:
                 break
             kwargs.update(ExclusiveStartKey=response['LastEvaluatedKey'])
+
+        return
 
 
     def __make_condition_eq(self, keys:Dict[str, Any], type:Key|Attr, operator:And|Or=And) -> AttributeBase:
@@ -227,6 +312,57 @@ class Index:
                 ret = operator(ret, type(k).eq(v))
         return ret
 
+
+    def __join_conditions(self, conditions: List[AttributeBase|None], operator:And|Or) -> AttributeBase|None:
+        """
+        conditionを指定の結合子で連結
+        """
+
+        # 連結処理
+        ret:None|AttributeBase = None
+        for condition in [ x for x in conditions if x is not None]:
+            # conditionを指定演算子で連結
+            ret = condition if ret is None else operator(ret, condition)
+
+        # 返却
+        return ret
+
+
+    def __make_hashable(self, obj) -> Tuple[Any]:
+        """
+        dict/list をhash化
+        """
+
+        if isinstance(obj, dict):
+            return tuple(sorted((k, self.__make_hashable(v)) for k, v in obj.items()))
+        elif isinstance(obj, list):
+            return tuple(self.__make_hashable(i) for i in obj)
+        else:
+            return obj
+
+
+    def __extract_dict_common_keys(self, dicts:List[Dict]) -> List:
+        """
+        List[Dict] から共通する dict キーを抽出
+        """
+
+        if len(dicts) == 0:
+            return []
+        results: List = list(dicts[0].keys())
+        for d in dicts:
+            results = [ k for k in d.keys() if k in results ]
+        return results
+
+    def __uniqueness_dict(self, dicts:List[Dict]) -> List[Dict]:
+        """
+        List[Dict] をユニーク化
+        """
+
+        ret:List[Dict] = []
+        for d in dicts:
+            if d not in ret:
+                ret.append(d)
+        return ret
 
 
 
@@ -410,7 +546,7 @@ class Table:
             kwargs.update(ExclusiveStartKey=response['LastEvaluatedKey'])
 
 
-    def query(self, KeyConditionExpression, IndexName:str=None, **kwargs) -> Iterator[Dict[str, Any]]:
+    def query(self, KeyConditionExpression, IndexName:str=None, **kwargs) -> Iterator[List[Dict[str, Any]]]:
 
         # required
         kwargs.update(KeyConditionExpression=KeyConditionExpression)
@@ -428,11 +564,23 @@ class Table:
             kwargs.update(ExclusiveStartKey=response['LastEvaluatedKey'])
 
 
-    def query2(self, key_items:Dict[str, Any], **kwargs) -> Iterator[Dict[str, Any]]:
-        idx:Index = self.get_best_index(search_keys=key_items.keys(), range_compare_key=None)
-        if idx is None:
-            raise ValueError("No index that matches the key_items.")
-        return idx.query(key_items)
+    def query2(self, key_items:Dict[str, Any], **kwargs) -> Iterator[List[Dict[str, Any]]]:
+        if isinstance(key_items, list) and len(key_items)== 0:
+            # 条件が空の場合は空リストを返却
+            yield []
+
+        elif isinstance(key_items, list):
+            # 共通するキーを抽出してindexを判別
+            common_keys:List[str] = self.__extract_dict_common_keys(dicts=key_items)
+            idx:Index = self.get_best_index(search_keys=common_keys, range_compare_key=None)
+            if idx is None:
+                raise ValueError(f"No index that matches the key_items. {common_keys}")
+            # query実行
+            yield from idx.query(items=key_items)
+
+        elif isinstance(key_items, dict):
+            # dictの場合はリスト形式に変換して再帰実行
+            yield from self.query2(key_items=[key_items], **kwargs)
 
 
     def get_item(self, key:Dict[str,Any], **kwargs):
@@ -583,60 +731,90 @@ class Table:
     def delete_upsert(
             self,
             items:List[Dict[str, Any]],
-            index_name:str=None,
-            key_names:List[str]=None,
+            delete_key_names:List[str] = None,
+            delete_keys:List[Dict[str, Any]] = None,
             ttl:int|datetime|None=None,
         ) -> Dict:
         """
-        データの洗い替え(DELETE/INSERT/UPDATE)
+        データの洗い替え(DELETE/UPSERT)
         ---
         データを洗い替える。
         更新データの比較キー項目と一致する既存データを削除/更新対象とする。
 
         :param keys: items 更新データのリスト
         :type type: Dict[str, Any]
-        :param type: index_name 検索に使用するINDEX。None時はプライマリーINDEXを使用。
-        :type type: str
-        :param keys: key_names 比較キー項目名。INDEXキー以外の項目も指定可。PKは必須。None時は指定INDEXの全項目を適用。
-        :type type: List[Dict]
+        :param keys: delete_key_names 削除キー名のリスト。更新データ(items)と同一の指定キーを持つデータを事前削除する。
+        :type type: List[str]
+        :param keys: delete_keys 削除キーのリスト。指定のキーで事前削除する。
+        :type type: List[Dict[str, Any]]
         """
 
         #-----------------------------------------
-        #   事前処理
-        #-----------------------------------------
-        # 処理要否チェック: UpdateItems が空の場合は何もしない
-        if not items:
-            return {}
-
-
-        #-----------------------------------------
-        #   INDEX の情報を取得
+        #   パラメータチェック
         #-----------------------------------------
 
-        # 検索INDEX
-        search_index_defs: Dict[str,str]
-        if index_name is None:
-            # IndexName指定がない場合はプライマリを使用。
-            search_index_defs = self.pk_schema
-        else:
-            # INDEX情報を取得。INDEX非存在時はエラー
-            search_index_defs: Dict[str, Any] = \
-                self.gsi_schemas.get(index_name, None) or \
-                self.lsi_schemas.get(index_name, None)
-            if search_index_defs is None:
-                raise NameError(f"Index `{index_name}` does not exist.")
+        # 削除キー情報の両方指定アリはNG
+        if all([delete_key_names, delete_keys]):
+            raise ValueError("must specify either `delete_key_names` or `delete_keys`.")
+
+        # 削除キー情報の両方emptyはNG
+        if not (delete_key_names or delete_keys):
+            raise ValueError("must specify either `delete_key_names` or `delete_keys`.")
+
 
         #-----------------------------------------
         #   更新前チェック
         #-----------------------------------------
-
-        # 更新データのプライマリーキー項目に未設定のものがあればエラーとする。
+        # 更新データにプライマリーキー項目が未設定のものがあればエラーとする。
         # 登録処理の途中でエラーとしないために、事前に落とす。
+        i: int = -1
         for update_item in items:
-            for key_type, key_name in self.pk_schema.items():
-                if update_item.get(key_name, None) is None:
-                    raise ValueError(f"{key_type}-KEY `{key_name}` is not set in items.")
+            i += 1
+            for key_name in self.pk.hash_keys:
+                if key_name not in update_item.keys():
+                    raise ValueError(f"PrimaryIndex HASH-KEY `{key_name}` is not set in items[{i}].")
 
+
+        #-----------------------------------------
+        # 削除キー情報の取得および調整
+        #-----------------------------------------
+
+        # 不足している情報を生成
+        if delete_key_names:
+            # items から削除キー情報を抽出。
+            # キーが不足している場合はエラーにしたいが未実装
+            delete_keys = [
+                { k:v for k,v in items.items() for k in delete_key_names }
+            ]
+        else:
+            # delete_keys から キー名のリストを作成
+            delete_key_names = delete_keys[0].keys()
+
+        # 重複を排除
+        temp_delete_key_names = []
+        for x in delete_keys:
+            if x not in temp_delete_key_names:
+                temp_delete_key_names.append(x)
+        delete_keys = temp_delete_key_names
+
+
+        #-----------------------------------------
+        #   INDEX を取得
+        #-----------------------------------------
+        best_index:Index = self.get_best_index(search_keys=delete_key_names)
+        if not best_index:
+            raise ValueError(f"No matching index found ({delete_key_names})")
+
+
+        # #-----------------------------------------
+        # #   比較キーを生成
+        # #-----------------------------------------
+        # index_key_names:List[str] = []   # KeyCondition用
+        # filter_key_names:List[str] = []  # Filter用
+        # ⇒ index.query に任せればいいので、やる必要がない。
+
+        return 
+        # ここから旧処理
 
         #-----------------------------------------
         #   比較キーの生成
@@ -887,3 +1065,12 @@ class Table:
         else:
             return obj
 
+
+    def __extract_dict_common_keys(self, dicts:List[Dict]) -> List:
+        """dict of list から共通する dict キーを抽出"""
+        if len(dicts) == 0:
+            return []
+        results: List = list(dicts[0].keys())
+        for d in dicts:
+            results = [ k for k in d.keys() if k in results ]
+        return results
