@@ -1,8 +1,17 @@
 import pytest
+from typing import List, Dict, Any
 
-from dynamodb import dynamodb_util
-from dynamodb.dynamodb_util import IndexTypes
+from dynamodb.index import DynamoIndex
+from dynamodb import DynamoIndexTypes
 from pprint import pprint
+
+
+
+def __make_key_schemas(hash_keys:List[str], range_keys:List[str] = []) -> List[Dict[str, str]]:
+    return [
+        *[ { "KeyType": "HASH", "AttributeName": x } for x in hash_keys ],
+        *[ { "KeyType": "RANGE", "AttributeName": x } for x in range_keys ],
+    ]
 
 
 
@@ -19,12 +28,11 @@ from pprint import pprint
     ]
 )
 def test_match_hash_only_x1(i_search_keys, i_range_key, e_is_match, e_hash_keys, e_range_keys):
-    idx:dynamodb_util.Table = dynamodb_util.Index(
+    idx:DynamoIndex = DynamoIndex(
         table=None,
         name="IDX-01",
         type=None,
-        hash_keys=["pk1"],
-        range_keys=[],
+        key_schemas=__make_key_schemas(hash_keys=["pk1"], range_keys=[])
     )
 
     ret = idx.containing_keys(search_keys=i_search_keys, range_compare_key=i_range_key)
@@ -50,12 +58,11 @@ def test_match_hash_only_x1(i_search_keys, i_range_key, e_is_match, e_hash_keys,
     ]
 )
 def test_match_hash_only_x3(i_search_keys, i_range_key, e_is_match, e_hash_keys, e_range_keys):
-    idx:dynamodb_util.Table = dynamodb_util.Index(
+    idx:DynamoIndex = DynamoIndex(
         table=None,
         name="IDX-01",
         type=None,
-        hash_keys=["pk1", "pk2", "pk3"],
-        range_keys=[],
+        key_schemas=__make_key_schemas(hash_keys=["pk1", "pk2", "pk3"], range_keys=[])
     )
 
     ret = idx.containing_keys(search_keys=i_search_keys, range_compare_key=i_range_key)
@@ -103,12 +110,11 @@ def test_match_hash_only_x3(i_search_keys, i_range_key, e_is_match, e_hash_keys,
     ]
 )
 def test_match_hash_and_range(i_search_keys, i_range_key, e_is_match, e_hash_keys, e_range_keys):
-    idx:dynamodb_util.Table = dynamodb_util.Index(
+    idx:DynamoIndex = DynamoIndex(
         table=None,
         name="IDX-01",
         type=None,
-        hash_keys=["pk1", "pk2"],
-        range_keys=["sk1", "sk2", "sk3"],
+        key_schemas=__make_key_schemas(hash_keys=["pk1", "pk2"], range_keys=["sk1", "sk2", "sk3"])
     )
 
     ret = idx.containing_keys(search_keys=i_search_keys, range_compare_key=i_range_key)

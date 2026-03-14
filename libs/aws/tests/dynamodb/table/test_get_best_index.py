@@ -2,8 +2,9 @@ import pytest
 from typing import List,Dict
 from pprint import pprint
 
-from dynamodb import dynamodb_util
-from dynamodb.dynamodb_util import IndexTypes
+from dynamodb import DynamoTable
+from dynamodb import DynamoIndexTypes
+from dynamodb.index import DynamoIndex
 
 TABLE_NAME:str = "test-20260128"
 
@@ -14,25 +15,25 @@ TABLE_NAME:str = "test-20260128"
     ],
     [
         # primary に合致
-        pytest.param(["A", "pk"]                             , None, True, IndexTypes.Primary ,None),
-        pytest.param(["A", "pk", "sk"]                       , None, True, IndexTypes.Primary, None),
-        pytest.param(["A", "pk", "sk", "lsi_sk", "gsi_pk1"]  , None, True, IndexTypes.Primary, None),
-        pytest.param(["A", "pk"]                             , "sk", True, IndexTypes.Primary ,None),
-        pytest.param(["A", "pk", "lsi_sk", "gsi_pk1"]        , "sk", True, IndexTypes.Primary, None),
+        pytest.param(["A", "pk"]                             , None, True, DynamoIndexTypes.Primary ,None),
+        pytest.param(["A", "pk", "sk"]                       , None, True, DynamoIndexTypes.Primary, None),
+        pytest.param(["A", "pk", "sk", "lsi_sk", "gsi_pk1"]  , None, True, DynamoIndexTypes.Primary, None),
+        pytest.param(["A", "pk"]                             , "sk", True, DynamoIndexTypes.Primary ,None),
+        pytest.param(["A", "pk", "lsi_sk", "gsi_pk1"]        , "sk", True, DynamoIndexTypes.Primary, None),
 
         # LSI に合致
-        pytest.param(["A", "pk", "lsi_sk"]   ,  None, True, IndexTypes.LSI, "LSI-01"),
-        pytest.param(["A", "pk"]             , "lsi_sk", True, IndexTypes.LSI, "LSI-01"),
-        pytest.param(["A", "pk", "lsi_sk"]   , "lsi_sk", True, IndexTypes.LSI, "LSI-01"),      
-        pytest.param(["A", "pk", "sk"]       , "lsi_sk", True, IndexTypes.LSI, "LSI-01"),  # range_compare_key優先
+        pytest.param(["A", "pk", "lsi_sk"]   ,  None, True, DynamoIndexTypes.LSI, "LSI-01"),
+        pytest.param(["A", "pk"]             , "lsi_sk", True, DynamoIndexTypes.LSI, "LSI-01"),
+        pytest.param(["A", "pk", "lsi_sk"]   , "lsi_sk", True, DynamoIndexTypes.LSI, "LSI-01"),      
+        pytest.param(["A", "pk", "sk"]       , "lsi_sk", True, DynamoIndexTypes.LSI, "LSI-01"),  # range_compare_key優先
 
         # GSI1 に合致
-        pytest.param(["A", "gsi_pk1"]   ,  None, True, IndexTypes.GSI, "GSI-01"),
+        pytest.param(["A", "gsi_pk1"]   ,  None, True, DynamoIndexTypes.GSI, "GSI-01"),
 
         # GSI2 に合致（GSI1にも合致するが、より長い2が優先）
-        pytest.param(["A", "gsi_pk1", "gsi_pk2"]            ,  None, True, IndexTypes.GSI, "GSI-02"),
-        pytest.param(["A", "gsi_pk1", "gsi_pk2", "gsi_sk1"] ,  None, True, IndexTypes.GSI, "GSI-02"),
-        pytest.param(["A", "gsi_pk1", "gsi_pk2", "gsi_sk2"] ,  None, True, IndexTypes.GSI, "GSI-02"), # HASHまでマッチ
+        pytest.param(["A", "gsi_pk1", "gsi_pk2"]            ,  None, True, DynamoIndexTypes.GSI, "GSI-02"),
+        pytest.param(["A", "gsi_pk1", "gsi_pk2", "gsi_sk1"] ,  None, True, DynamoIndexTypes.GSI, "GSI-02"),
+        pytest.param(["A", "gsi_pk1", "gsi_pk2", "gsi_sk2"] ,  None, True, DynamoIndexTypes.GSI, "GSI-02"), # HASHまでマッチ
 
         # どれにも合致しない（Range比較キー）
         pytest.param(["A", "gsi_pk1", "gsi_pk2", "gsi_sk1"] ,  "gsi_sk3", False, None, None),
@@ -43,9 +44,9 @@ TABLE_NAME:str = "test-20260128"
     ]
 )
 def test_match(i_search_keys, i_range_compare_key, e_is_match, e_index_type, e_index_name):
-    table:dynamodb_util.Table = dynamodb_util.Table(table_name=TABLE_NAME)
+    table:DynamoTable = DynamoTable(table_name=TABLE_NAME)
 
-    ret:dynamodb_util.Index = table.get_best_index(
+    ret:DynamoIndex = table.get_best_index(
         search_keys=i_search_keys,
         range_compare_key=i_range_compare_key
     )

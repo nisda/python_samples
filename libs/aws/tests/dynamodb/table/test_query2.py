@@ -1,6 +1,5 @@
 import pytest
-from dynamodb import dynamodb_util
-from dynamodb.dynamodb_util import IndexTypes
+from dynamodb import DynamoTable
 import sys
 from pprint import pprint
 from datetime import datetime
@@ -36,7 +35,7 @@ TABLE_NAME = "test-20260128"
     ]
 )
 def test_query2(i_key_items):
-    table:dynamodb_util.Table = dynamodb_util.Table(table_name=TABLE_NAME)
+    table:DynamoTable = DynamoTable(table_name=TABLE_NAME)
 
     ret = list(table.query2(key_items=i_key_items))
     print(len(ret))

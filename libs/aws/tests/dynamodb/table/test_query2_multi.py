@@ -1,6 +1,5 @@
 import pytest
-from dynamodb import dynamodb_util
-from dynamodb.dynamodb_util import IndexTypes
+from dynamodb import DynamoTable
 import sys
 from pprint import pprint
 from datetime import datetime
@@ -15,7 +14,7 @@ TABLE_NAME = "test-20260128"
 
 
 def test_query2():
-    table:dynamodb_util.Table = dynamodb_util.Table(table_name=TABLE_NAME)
+    table:DynamoTable = DynamoTable(table_name=TABLE_NAME)
 
     i_key_items = [
         {"pk": "ut_put", "sk": "overwrite"},
@@ -27,3 +26,4 @@ def test_query2():
     print(type(ret))
     for x in ret:
          print(type(x))
+         print(x)

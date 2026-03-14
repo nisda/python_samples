@@ -1,9 +1,8 @@
-from dynamodb import dynamodb_util
-import sys
-from pprint import pprint
+from dynamodb import DynamoTable
 from datetime import datetime
-import time
 from zoneinfo import ZoneInfo
+from pprint import pprint
+import time
 
 """
 本来はUnitTestの中でテーブル作成も行うべきであるが、今回は省略する。
@@ -16,13 +15,51 @@ TABLE_NAME = "test-20260128"
 
 
 
-def test_updated_at():
-    table:dynamodb_util.Table = dynamodb_util.Table(table_name=TABLE_NAME)
+
+def test_updated_at_none():
+    table:DynamoTable = DynamoTable(table_name=TABLE_NAME, updated_at_attr=None)
+    item = {'pk': 'ut_put', 'sk': 'updated_at_none', 'biko': ''}
+    ret = table.put_item(item=item)
+
+    updated_at:str|None = ret.get("updated_at", None)
+
+    assert updated_at is None
+    assert item == ret
+
+
+def test_updated_at_default():
+    table:DynamoTable = DynamoTable(table_name=TABLE_NAME)
     item = {'pk': 'ut_put', 'sk': 'updated_at', 'biko': ''}
     ret = table.put_item(item=item)
 
     now_ymd = datetime.now(ZoneInfo("Asia/Tokyo")).strftime("%Y-%m-%d")
-    updated_at:str|None = ret.pop("_updated_at", None)
+    updated_at:str|None = ret.pop("updated_at", None)
+
+    assert updated_at is not None
+    assert updated_at.startswith(now_ymd)
+    assert item == ret
+
+
+def test_updated_at_format():
+    table:DynamoTable = DynamoTable(table_name=TABLE_NAME, updated_at_format="--%Y%m%d--")
+    item = {'pk': 'ut_put', 'sk': 'updated_at', 'biko': ''}
+    ret = table.put_item(item=item)
+
+    now_ymd = datetime.now(ZoneInfo("Asia/Tokyo")).strftime("--%Y%m%d--")
+    updated_at:str|None = ret.pop("updated_at", None)
+
+    assert updated_at is not None
+    assert updated_at == now_ymd
+    assert item == ret
+
+
+def test_updated_at_timezone():
+    table:DynamoTable = DynamoTable(table_name=TABLE_NAME, time_zone="UTC")
+    item = {'pk': 'ut_put', 'sk': 'updated_at', 'biko': ''}
+    ret = table.put_item(item=item)
+
+    now_ymd = datetime.now(ZoneInfo("UTC")).strftime("%Y-%m-%dT%H:%M")
+    updated_at:str|None = ret.pop("updated_at", None)
 
     assert updated_at is not None
     assert updated_at.startswith(now_ymd)
@@ -30,49 +67,47 @@ def test_updated_at():
 
 
 
-def test_updated_at_none():
-    table:dynamodb_util.Table = dynamodb_util.Table(table_name=TABLE_NAME, updated_at_attr=None)
-    item = {'pk': 'ut_put', 'sk': 'updated_at_none', 'biko': ''}
-    ret = table.put_item(item=item)
-
-    updated_at:str|None = ret.get("_updated_at", None)
-
-    assert updated_at is None
-    assert item == ret
-
-
-def test_ttl():
-    table:dynamodb_util.Table = dynamodb_util.Table(table_name=TABLE_NAME, ttl_default=10)
+def test_ttl_default():
+    table:DynamoTable = DynamoTable(table_name=TABLE_NAME, ttl_default=10)
 
     # default が適用される
     ret = table.put_item(item={'pk': 'ut_put', 'sk': 'ttl_default', 'biko': ''})
     assert ret.get("ttl", None) >= datetime.now().timestamp() + 9
     assert ret.get("ttl", None) < datetime.now().timestamp() + 11
 
+def test_ttl_arg_spec():
+    table:DynamoTable = DynamoTable(table_name=TABLE_NAME, ttl_default=10)
+
     # 個別指定すればそれが有効
     ret = table.put_item(item={'pk': 'ut_put', 'sk': 'ttl_specify'}, ttl=60)
     assert ret.get("ttl", None) >= datetime.now().timestamp() + 59
     assert ret.get("ttl", None) < datetime.now().timestamp() + 61
 
+def test_ttl_arg_zero():
+    table:DynamoTable = DynamoTable(table_name=TABLE_NAME, ttl_default=10)
     # 個別指定がzeroならばttlなし
     ret = table.put_item(item={'pk': 'ut_put', 'sk': 'ttl_specify_zero'}, ttl=0)
     assert ret.get("ttl", None) is None
 
+def test_ttl_arg_none():
+    table:DynamoTable = DynamoTable(table_name=TABLE_NAME, ttl_default=10)
     # 個別指定が None であれば無視して default 採用
     ret = table.put_item(item={'pk': 'ut_put', 'sk': 'ttl_specify_none'}, ttl=None)
     assert ret.get("ttl", None) >= datetime.now().timestamp() + 9
     assert ret.get("ttl", None) < datetime.now().timestamp() + 11
 
-    # item にセットされていたらそれをそのまま登録。上書きしない。
+def test_ttl_already_exists_overwrite():
+    table:DynamoTable = DynamoTable(table_name=TABLE_NAME, ttl_default=10)
+    # item にセットされていても上書き
     ttl_ts:int = int(datetime.now().timestamp()) + 30
     ret = table.put_item(item={'pk': 'ut_put', 'sk': 'ttl_item', "ttl": ttl_ts}, ttl=60)
-    assert ret.get("ttl", None) >= datetime.now().timestamp() + 29
-    assert ret.get("ttl", None) < datetime.now().timestamp() + 31
+    assert ret.get("ttl", None) >= datetime.now().timestamp() + 59
+    assert ret.get("ttl", None) < datetime.now().timestamp() + 61
 
 
 
-def test_overwrite():
-    table:dynamodb_util.Table = dynamodb_util.Table(table_name=TABLE_NAME)
+def test_put_overwrite():
+    table:DynamoTable = DynamoTable(table_name=TABLE_NAME)
     table.truncate()
 
     # 上書き可
@@ -109,5 +144,7 @@ def test_overwrite():
     time.sleep(3)
     ret = table.put_item(item={'pk': 'ut_put', 'sk': 'ttl_none_ow'}, overwrite=False, ttl=30) 
     assert ret is None
+
+
 
 

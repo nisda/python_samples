@@ -9,6 +9,7 @@ from boto3.dynamodb.conditions import AttributeBase, Key, Attr, Or, And, Not
 from botocore.exceptions import ClientError
 from enum import Enum
 
+
 # boto3.dynamodb.types.Binary -> bytes
 def __convert_binary_to_bytes(item:Union[Binary, List, Dict, Any]):
     if isinstance(item, list):
@@ -73,6 +74,8 @@ def make_update_expression(
             **add_attr_values,
         },
     }
+
+
 
 
 class IndexTypes(Enum):
@@ -159,14 +162,14 @@ class Index:
             }
 
     @overload
-    def query(self, items:Dict[str, Any], **kwargs:Dict[str, Any]) -> Iterator[Dict[str, Any]]:
+    def query(self, items:Dict[str, Any], primary_attr_only:bool=False, **kwargs:Dict[str, Any]) -> Iterator[Dict[str, Any]]:
         ...
 
     @overload
-    def query(self, items:List[Dict[str, Any]], **kwargs:Dict[str, Any]) -> Iterator[Dict[str, Any]]:
+    def query(self, items:List[Dict[str, Any]], primary_attr_only:bool=False, **kwargs:Dict[str, Any]) -> Iterator[Dict[str, Any]]:
         ...
 
-    def query(self, items:Union[Dict[str, Any], List[Dict[str, Any]]], **kwargs:Dict[str, Any]) -> Iterator[List[Dict[str, Any]]]:
+    def query(self, items:Union[Dict[str, Any], List[Dict[str, Any]]], primary_attr_only:bool=False,  **kwargs:Dict[str, Any]) -> Iterator[List[Dict[str, Any]]]:
         #-----------------------------------------
         #   パラメータチェック＆調整
         #-----------------------------------------
@@ -226,7 +229,7 @@ class Index:
         #   query実行
         #-----------------------------------------
         for tmp_item in grouped_items:
-            ret_items = self.__query_one(key_item=tmp_item["key_items"], filter_items=tmp_item["filter_items"], **kwargs)
+            ret_items = self.__query_one(key_item=tmp_item["key_items"], filter_items=tmp_item["filter_items"], primary_attr_only=primary_attr_only, **kwargs)
             yield from ret_items
 
         return
@@ -234,7 +237,7 @@ class Index:
 
 
 
-    def __query_one(self, key_item:Dict[str, Any], filter_items:List[Dict[str, Any]], **kwargs:Dict[str, Any]) -> Iterator[List[Dict[str, Any]]]:
+    def __query_one(self, key_item:Dict[str, Any], filter_items:List[Dict[str, Any]], primary_attr_only:bool, **kwargs:Dict[str, Any]) -> Iterator[List[Dict[str, Any]]]:
         """
         query実行(1条件)
         """
@@ -267,13 +270,14 @@ class Index:
         #-----------------------------------------
         #   検索実行
         #-----------------------------------------
-
         # パラメータ調整
+        primary_attr_names = [ x["AttributeName"] for x in self.table.key_schema ]
         params: Dict = {
             k:v
             for k,v in {
                 "IndexName" : self.name,
                 "KeyConditionExpression" : key_condition,
+                "ProjectionExpression" : ",".join(primary_attr_names) if primary_attr_only else None
                 # "FilterExpression" : filter_conditsion,
             }.items()
             if v
@@ -366,9 +370,182 @@ class Index:
 
 
 
+class BatchUpdater():
+
+    __stack_items:Dict[str, Dict[Tuple, Dict[str, Any]]] = {}
+    """ __stack_items データ構造
+        __stack_items = {
+            "table_name" : {
+                "(pk, sk)" : {
+                    "operation" : "Put|Delete",
+                    "key"  : { key },
+                    "item" : { item },
+                }
+            }
+        }
+    """
+
+
+    def __init__(self,
+            region_name:str = None,
+            session:boto3.session.Session = None,
+        ):
+        self.__stack_items = {}
+
+        # session 取得
+        session = session if session else boto3.Session(region_name=region_name)
+
+        # client/resource 取得
+        self.__client = session.client('dynamodb', region_name=region_name)
+        self.__resource = session.resource('dynamodb', region_name=region_name)
+
+
+    def put_items(self, table_name:str, items:List[Dict[str, Any]]) -> Dict[str, Dict[Tuple, Dict[str, Any]]]:
+        if table_name not in self.__stack_items:
+            self.__stack_items[table_name] = {}
+
+        for item in items:
+            key:Dict = self.__get_primary_keys(table_name=table_name, item=item)
+            key_hash:Tuple = self.__make_hashable(key)
+            self.__stack_items[table_name][key_hash] = {
+                "operation" : "Put",
+                "key"  : key,
+                "item" : item,
+            }
+
+        return self.get_stack()
+
+
+    def delete_items(self, table_name:str, items:List[Dict[str, Any]]) -> Dict[str, Dict[Tuple, Dict[str, Any]]]:
+        if table_name not in self.__stack_items:
+            self.__stack_items[table_name] = {}
+
+        for item in items:
+            key:Dict = self.__get_primary_keys(table_name=table_name, item=item)
+            key_hash:Tuple = self.__make_hashable(key)
+            self.__stack_items[table_name][key_hash] = {
+                "operation" : "Delete",
+                "key"  : key,
+                "item" : None,
+            }
+
+        return self.get_stack()
+
+    def get_stack(self) -> Dict[str, Dict[Tuple, Dict[str, Any]]]:
+        """スタックデータを取得"""
+        return self.__stack_items
+
+
+    def commit(self, transaction:bool=True) -> Dict[str, Dict[Tuple, Dict[str, Any]]]:
+        # 実行前スタックデータを退避
+        stack_items = self.get_stack()
+
+        # 実行
+        if transaction:
+            self.__commit_transaction()
+        else:
+            self.__commit_batch_writer()
+
+        # スタックデータ初期化
+        self.__stack_items = {}
+
+        return stack_items
+
+
+    def __commit_batch_writer(self) -> None:
+ 
+        for table_name, commands in self.__stack_items.items():
+
+            # データ振り分け
+            delete_keys: List[Dict] = []
+            put_items: List[Dict] = []
+            for idx in sorted(commands.keys()):
+                command:Dict = commands[idx]
+                operation:str = command["operation"].lower()
+
+                if operation == "delete":
+                    delete_keys.append(command["key"])
+                elif operation == "put":
+                    put_items.append(command["item"])
+
+            # 実行
+            table = self.__resource.Table(table_name)
+            with table.batch_writer() as batch:
+                for item in put_items:
+                    batch.put_item(Item=item)
+                for key in delete_keys:
+                    batch.delete_item(Key=key)
+
+            # # データ削除実行
+            # with table.batch_writer() as batch:
+            #     for key in delete_keys:
+            #         batch.delete_item(Key=key)
+
+        # 終了
+        return None
+
+
+
+    def __commit_transaction(self) -> None:
+
+        # コマンドパラメータ生成
+        transact_items: List[Dict] = []
+        for table_name, commands in self.__stack_items.items():
+            for idx in sorted(commands.keys()):
+                command:Dict = commands[idx]
+                operation:str = command["operation"].lower()
+
+                if operation == "delete":
+                    transact_items.append({
+                        "Delete" : {
+                            "TableName" : table_name,
+                            "Key" : type_serialize(item=command["key"]),
+                        }
+                    })
+                elif operation == "put":
+                    transact_items.append({
+                        "Put" : {
+                            "TableName" : table_name,
+                            "Item" : type_serialize(item=command["item"]),
+                        }
+                    })
+
+        # コマンド実行
+        response = self.__client.transact_write_items(TransactItems=transact_items)
+
+        return
+
+
+
+
+
+    def __get_primary_keys(self, table_name:str, item:Dict[str, Any]) -> Dict[str, Any]:
+        """テーブルの PrimaryKey（PK+SK)のリストを取得"""
+
+        table = self.__resource.Table(table_name)
+        primary_keys:List[str] = [
+            schema["AttributeName"]
+            for schema in table.key_schema
+        ]
+        item_keys:Dict[str, Any] = { k: item[k] for k in primary_keys }
+        return item_keys 
+
+
+    def __make_hashable(self, obj) -> Tuple[Any]:
+        """ lidt|dict のハッシュ化"""
+
+        if isinstance(obj, dict):
+            return tuple(sorted((k, self.__make_hashable(v)) for k, v in obj.items()))
+        elif isinstance(obj, list):
+            return tuple(self.__make_hashable(i) for i in obj)
+        else:
+            return obj
+
+
 
 class Table:
     _table = None
+    _batch_updater:BatchUpdater = None
     _pk:Index = None
     _gsi:Dict[str, Index] = None
     _lsi:Dict[str, Index] = None
@@ -376,6 +553,10 @@ class Table:
     _ttl_default:int = 0
     _updated_at_attr:Optional[str] = None
     _time_zone:str = None
+
+    @property
+    def table_name(self) -> str:
+        return self._table.table_name
 
 
     @property
@@ -444,6 +625,9 @@ class Table:
         # Tableリソース取得
         self._table = dynamodb_rsc.Table(table_name)
 
+        # BatchUpdater
+        self._batch_updater = BatchUpdater(region_name=region_name, session=session)
+
 
         # PrimaryKey
         pk_schemas = __divide_key_schemas(schemas=self._table.key_schema)
@@ -487,7 +671,7 @@ class Table:
         self._ttl_default = ttl_default
 
         # 更新日時name
-        self._updated_at_attr = updated_at_attr
+        self._updated_at_attr = updated_at_attr.strip() or None
         self._time_zone       = time_zone or "Asia/Tokyo"
 
 
@@ -564,10 +748,14 @@ class Table:
             kwargs.update(ExclusiveStartKey=response['LastEvaluatedKey'])
 
 
-    def query2(self, key_items:Dict[str, Any], **kwargs) -> Iterator[List[Dict[str, Any]]]:
+    def query2(self, key_items:Dict[str, Any], primary_attr_only:bool=False, **kwargs) -> Iterator[List[Dict[str, Any]]]:
         if isinstance(key_items, list) and len(key_items)== 0:
             # 条件が空の場合は空リストを返却
             yield []
+
+        elif isinstance(key_items, dict):
+            # dictの場合はリスト形式に変換して再帰実行
+            yield from self.query2(key_items=[key_items], primary_attr_only=primary_attr_only, **kwargs)
 
         elif isinstance(key_items, list):
             # 共通するキーを抽出してindexを判別
@@ -576,11 +764,7 @@ class Table:
             if idx is None:
                 raise ValueError(f"No index that matches the key_items. {common_keys}")
             # query実行
-            yield from idx.query(items=key_items)
-
-        elif isinstance(key_items, dict):
-            # dictの場合はリスト形式に変換して再帰実行
-            yield from self.query2(key_items=[key_items], **kwargs)
+            yield from idx.query(items=key_items, primary_attr_only=primary_attr_only, **kwargs)
 
 
     def get_item(self, key:Dict[str,Any], **kwargs):
@@ -727,7 +911,37 @@ class Table:
         )
         return response["Attributes"]
 
+    @overload
+    def delete_upsert(
+            self,
+            items:List[Dict[str, Any]],
+            delete_key_names:List[str] = None,
+            ttl:int|datetime|None=None,
+        ) -> Dict:
+        pass
 
+    @overload
+    def delete_upsert(
+            self,
+            items:List[Dict[str, Any]],
+            delete_keys:Dict[str, Any] = None,
+            ttl:int|datetime|None=None,
+        ) -> Dict:
+        pass
+
+    @overload
+    def delete_upsert(
+            self,
+            items:List[Dict[str, Any]],
+            delete_keys:List[Dict[str, Any]] = None,
+            ttl:int|datetime|None=None,
+        ) -> Dict:
+        pass
+
+    ########################################
+    ### いらないのでは！？ ###
+    ### ただ、一括で
+    ########################################
     def delete_upsert(
             self,
             items:List[Dict[str, Any]],
@@ -755,11 +969,34 @@ class Table:
 
         # 削除キー情報の両方指定アリはNG
         if all([delete_key_names, delete_keys]):
-            raise ValueError("must specify either `delete_key_names` or `delete_keys`.")
+            raise ValueError("Only one of `delete_key_names` or `delete_keys` must be specified.")
 
         # 削除キー情報の両方emptyはNG
         if not (delete_key_names or delete_keys):
-            raise ValueError("must specify either `delete_key_names` or `delete_keys`.")
+            raise ValueError("Only one of `delete_key_names` or `delete_keys` must be specified.")
+
+        # 調整
+        if delete_keys and isinstance(delete_keys, dict):
+            delete_keys = [delete_keys]
+
+
+
+        #-----------------------------------------
+        #   入力データが０件の場合は対象の全削除＆処理終了
+        #-----------------------------------------
+        if len(items) == 0:
+            if delete_keys:
+                # delete_key が設定されていれば対象を削除して終了
+                delete_items:List[Dict] = list(self.query2(key_items=delete_keys, primary_attr_only=True))
+                self._batch_updater.delete_items(table_name=self.table_name, items=delete_items)
+                ret:Dict = self._batch_updater.get_stack()
+                self._batch_updater.commit(transaction=True)
+                return ret
+            else:
+                # delete_key が設定されていない場合は何もできない。そのまま終了。
+                return {}
+
+
 
 
         #-----------------------------------------
@@ -767,28 +1004,26 @@ class Table:
         #-----------------------------------------
         # 更新データにプライマリーキー項目が未設定のものがあればエラーとする。
         # 登録処理の途中でエラーとしないために、事前に落とす。
-        i: int = -1
         for update_item in items:
-            i += 1
-            for key_name in self.pk.hash_keys:
+            for key_name in self.pk.all_keys:
                 if key_name not in update_item.keys():
-                    raise ValueError(f"PrimaryIndex HASH-KEY `{key_name}` is not set in items[{i}].")
+                    raise ValueError(f"PrimaryKey `{key_name}` is not set in {update_item}.")
 
 
         #-----------------------------------------
-        # 削除キー情報の取得および調整
+        # 削除キー情報を調整
         #-----------------------------------------
 
-        # 不足している情報を生成
-        if delete_key_names:
-            # items から削除キー情報を抽出。
-            # キーが不足している場合はエラーにしたいが未実装
-            delete_keys = [
-                { k:v for k,v in items.items() for k in delete_key_names }
-            ]
-        else:
-            # delete_keys から キー名のリストを作成
-            delete_key_names = delete_keys[0].keys()
+        if not delete_key_names:
+            # delete_key_names が未指定のときは delete_keys から キー名のリストを作成
+            delete_key_names = list(delete_keys[0].keys())
+            delete_keys      = None
+
+        # items から削除キー情報を抽出。
+        delete_keys = [
+            { k: item[k] for k in delete_key_names }
+            for item in items
+        ]
 
         # 重複を排除
         temp_delete_key_names = []
@@ -798,110 +1033,25 @@ class Table:
         delete_keys = temp_delete_key_names
 
 
+
         #-----------------------------------------
-        #   INDEX を取得
+        #   登録済みアイテムを検索
         #-----------------------------------------
+
+        # INDEX を取得
         best_index:Index = self.get_best_index(search_keys=delete_key_names)
         if not best_index:
             raise ValueError(f"No matching index found ({delete_key_names})")
 
 
-        # #-----------------------------------------
-        # #   比較キーを生成
-        # #-----------------------------------------
-        # index_key_names:List[str] = []   # KeyCondition用
-        # filter_key_names:List[str] = []  # Filter用
-        # ⇒ index.query に任せればいいので、やる必要がない。
-
-        return 
-        # ここから旧処理
-
-        #-----------------------------------------
-        #   比較キーの生成
-        #-----------------------------------------
-        # KeyNames の振り分け
-        index_key_names:List[str] = []   # KeyCondition用
-        filter_key_names:List[str] = []  # Filter用
-        if key_names is None:
-            # 指定なしの場合はINDEX項目すべてを採用する。
-            index_key_names = [ v for v in search_index_defs.values() ]
-            filter_key_names = []
-        else:
-            # Hashキーが含まれていなかったらエラー
-            if search_index_defs["HASH"] not in key_names:
-                raise ValueError(f"HASH-KEY `{search_index_defs['HASH']}` is required for KeyNames.")
-            index_key_names  = [ x for x in key_names if x in search_index_defs.values() ]
-            filter_key_names = [ x for x in key_names if x not in search_index_defs.values() ]
-
-        #-----------------------------------------
-        #   検索条件リストを生成
-        #-----------------------------------------
-
-        # 全アイテムの検索キー部分のみを抽出してリスト化
-        search_keys: List[Dict] = [
-            {
-                "index_keys"  : { k: item.get(k, None) for k in index_key_names},
-                "filter_keys" : { k: item.get(k, None) for k in filter_key_names},
-            }
+        # 検索条件のリストを生成
+        search_items:List[Dict] = [
+            { k:v for k,v in item.items() if k in delete_key_names }
             for item in items
         ]
-        # index_key に Null(未設定) が含まれているデータは除外。
-        # index での検索対象ではない（論理的にNG）＆ 実行エラーになるため（物理的にNG）
-        search_keys = [
-            x for x in search_keys
-            if None not in x["index_keys"].values()
-        ]
 
-        # ユニーク化。重複処理を回避のため。
-        search_keys_unique:List[Dict] = []
-        for d in search_keys:
-            if d not in search_keys_unique:
-                search_keys_unique.append(d)
-
-        # index_keys でグループ化
-        grouped_keys: Dict[Tuple, List] = {}
-        for x in search_keys_unique:
-            hash = self.__make_hashable(x["index_keys"])
-            if hash in grouped_keys.keys():
-                grouped_keys[hash]["filter_keys"].append(x["filter_keys"])
-            else:
-                grouped_keys[hash] = {
-                    "index_keys" : x["index_keys"],
-                    "filter_keys" : [x["filter_keys"]]
-                }
-
-        # Conditionオブジェクトに変換
-        key_conditions: Dict[Tuple, List] = {}
-        for hash, grouped_key_info in grouped_keys.items():
-            key_conditions[hash] = {
-                "index_keys" : self.__make_key_condition(grouped_key_info["index_keys"], type=Key),
-                "filter_keys": self.__join_conditions(operator=Or, conditions=[
-                    self.__make_key_condition(keys=x, type=Attr)
-                    for x in grouped_key_info["filter_keys"]
-                ]),
-            }
-
-
-
-        #-----------------------------------------
-        #   登録済みアイテムを検索
-        #-----------------------------------------
-        # 削除/更新対象となる登録済みアイテムをリストアップ。
-        before_items:List[Dict] = []
-        for key_condition in key_conditions.values():
-            index_keys = key_condition["index_keys"]
-            filter_keys = key_condition["filter_keys"]
-            
-            params: Dict = {
-                "IndexName" : index_name,
-                "KeyConditionExpression" : index_keys,
-            }
-            if filter_keys is not None:
-                params.update(FilterExpression=filter_keys)
-
-
-            temp:List[Dict] = list(self.query(**params))
-            before_items.extend(temp)
+        # 検索
+        before_items:List[Dict] = list(best_index.query(items=search_items, primary_attr_only=True))
 
 
 
@@ -915,14 +1065,8 @@ class Table:
         for before_item in before_items:
             # 更新データとの比較
             for update_item in items:
-                # キー項目ごとに比較
-                for key_type, key_name in self.pk_schema.items():
-                    before_value:Any = before_item.get(key_name)
-                    update_value:Any = update_item.get(key_name)
-                    if before_value != update_value:
-                        break
-                else:
-                    # すべてのキーが合致 = 削除対象ではない。
+                if before_item.items() <= update_item.items():
+                    # キーが合致 = 更新対象である
                     break
             else:
                 # キーが合致するものがなかった = 削除対象である
@@ -934,20 +1078,19 @@ class Table:
         #-----------------------------------------
 
         # 返却データを生成
-        key_names_all = [ *index_key_names, *filter_key_names ]
         update_items = items
         result: Dict[str,List[Dict]] = {
-            "before" : [ { k:v for k,v in x.items() if k in key_names_all } for x in before_items ] ,
-            "delete" : [ { k:v for k,v in x.items() if k in key_names_all } for x in delete_items ] ,
-            "upsert" : [ { k:v for k,v in x.items() if k in key_names_all } for x in update_items ] ,
+            "before" : before_items,
+            "delete" : [ { k:v for k,v in x.items() if k in self.pk.all_keys } for x in delete_items ] ,
+            "upsert" : [ { k:v for k,v in x.items() if k in self.pk.all_keys } for x in update_items ] ,
         }
 
 
         # アイテムを登録
-        self.put_items(Items=update_items, ttl=ttl)
+        self.put_items(items=update_items, ttl=ttl)
 
         # アイテムを削除
-        self.delete_items(Items=delete_items)
+        self.delete_items(keys=delete_items)
 
 
         # 正常終了
@@ -1074,3 +1217,4 @@ class Table:
         for d in dicts:
             results = [ k for k in d.keys() if k in results ]
         return results
+
