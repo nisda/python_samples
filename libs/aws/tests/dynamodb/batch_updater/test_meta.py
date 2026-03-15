@@ -27,21 +27,23 @@ def _test_meta_handler(transaction:bool):
     table:DynamoTable = DynamoTable(table_name=TABLE_NAME, region_name=TABLE_REGION)
     table.truncate()
 
+    # アップデータ生成
     updater:DynamoBatchUpdater = DynamoBatchUpdater(region_name=TABLE_REGION)
-    pprint(updater)
+
 
     #-------------------------
-    # handler なし
+    # meta設定 なし
     #-------------------------
     ret = updater.put_items(table_name=TABLE_NAME, items=[ {"pk": "A", "sk": "1", "step": "1"} ])
     ret = updater.commit(transaction=transaction)
     ret = table.get_item(key={"pk": "A", "sk": "1"})
     assert ret.items() == {"pk": "A", "sk": "1", "step": "1"}.items()
 
+
     #-------------------------
-    # handler 追加。デフォルト動作
+    # meta設定 追加。デフォルト動作
     #-------------------------
-    ret = updater.add_meta_handler(handler=table)
+    ret = updater.set_meta_config(table_name=TABLE_NAME)
     ret = updater.put_items(table_name=TABLE_NAME, items=[ {"pk": "A", "sk": "2", "step": "2"} ])
     ret = updater.commit(transaction=transaction)
 
@@ -49,14 +51,14 @@ def _test_meta_handler(transaction:bool):
     assert ret.items() >= {"pk": "A", "sk": "2", "step": "2"}.items()
     assert ret.get("updated_at", None) is not None
 
+
     #-------------------------
-    # handler を後から追加⇒反映される。デフォルト動作
+    # meta設定 を後から追加⇒反映される。デフォルト動作
     #-------------------------
     updater:DynamoBatchUpdater = DynamoBatchUpdater(region_name=TABLE_REGION)
-    table:DynamoTable = DynamoTable(table_name=TABLE_NAME, region_name=TABLE_REGION)
 
     ret = updater.put_items(table_name=TABLE_NAME, items=[ {"pk": "A", "sk": "2", "step": "2"} ])
-    ret = updater.add_meta_handler(handler=table)
+    ret = updater.set_meta_config(table_name=TABLE_NAME)
     ret = updater.commit(transaction=transaction)
     ret = table.get_item(key={"pk": "A", "sk": "2"})
     assert ret.items() >= {"pk": "A", "sk": "2", "step": "2"}.items()
@@ -67,17 +69,15 @@ def _test_meta_handler(transaction:bool):
     # meta設定に変更あり -> 反映される
     #-------------------------
     updater:DynamoBatchUpdater = DynamoBatchUpdater(region_name=TABLE_REGION)
-    table:DynamoTable = DynamoTable(
-        table_name=TABLE_NAME,
-        region_name=TABLE_REGION,
-        ttl_default = 20,
-        updated_at_attr = "_updated_at",
-        updated_at_format = "%Y/%m/%d %H.%M.%S",
-        time_zone = "UTC",
-    )
+    meta_config:Dict = {
+        "ttl_default" :  20,
+        "updated_at_attr" : "_updated_at",
+        "updated_at_format" : "%Y/%m/%d %H.%M.%S",
+        "time_zone" : "UTC",
+    }
 
     ret = updater.put_items(table_name=TABLE_NAME, items=[ {"pk": "A", "sk": "3", "step": "3"} ])
-    ret = updater.add_meta_handler(handler=table)
+    ret = updater.set_meta_config(table_name=TABLE_NAME, **meta_config)
     ret = updater.commit(transaction=transaction)
     ret = table.get_item(key={"pk": "A", "sk": "3"})
     assert ret.items() >= {"pk": "A", "sk": "3", "step": "3"}.items()
@@ -93,13 +93,10 @@ def _test_meta_handler(transaction:bool):
     #-------------------------
     updater:DynamoBatchUpdater = DynamoBatchUpdater(region_name=TABLE_REGION)
 
-
-    table:DynamoTable = DynamoTable(table_name=TABLE_NAME, region_name=TABLE_REGION, updated_at_attr="_updated_at")
-
     ret = updater.put_items(table_name=TABLE_NAME, items=[ {"pk": "A", "sk": "4", "step": "4"} ])
     ret = updater.put_items(table_name=TABLE_NAME, items=[ {"pk": "A", "sk": "5", "step": "5"} ], ttl=30)
 
-    ret = updater.add_meta_handler(handler=table)
+    ret = updater.set_meta_config(table_name=TABLE_NAME, updated_at_attr="_updated_at")
     ret = updater.commit(transaction=transaction)
 
     ret = table.get_item(key={"pk": "A", "sk": "4"})

@@ -12,14 +12,6 @@ from .tools import DynamoTools
 
 
 class DynamoTable:
-    # _table = None
-    # _pk:DynamoIndex = None
-    # _gsi:Dict[str, DynamoIndex] = None
-    # _lsi:Dict[str, DynamoIndex] = None
-    # _ttl_name:Optional[str] = None
-    # _ttl_default:Union[int, datetime] = 0
-    # _updated_at_attr:Optional[str] = None
-    # _time_zone:ZoneInfo = None
 
     @property
     def table_name(self:Self) -> str:

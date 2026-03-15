@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Tuple, Self, Union
+from typing import List, Dict, Any, Tuple, Self, Union, Optional
 from datetime import datetime
 
 from boto3 import Session
@@ -8,40 +8,54 @@ from .table import DynamoTable
 
 class DynamoBatchUpdater():
 
-    ## クラス変数は共有されてしまうため、ここには書かない。
-    # __table_handers:Dict[str, DynamoTable] = {}
-    # __stack_items:Dict[str, Dict[Tuple, Dict[str, Any]]] = {}
-    # """ データ構造
-    # __stack_items = {
-    #     "table_name" : {
-    #         "(pk, sk)" : {
-    #             "operation" : "Put|Delete",
-    #             "key"  : { key },
-    #             "item" : { item },
-    #             "meta" : { ttl, ... }
-    #         }
-    #     }
-    # }
-    # """
 
-
-
-    def __init__(self:Self, region_name:str = None, session:Session = None,):
+    def __init__(self:Self, region_name:Optional[str] = None, session:Optional[Session] = None,):
         """コンストラクタ"""
 
         # メンバ変数
+        self.__meta_configs = {}
+
         self.__stack_items = {}
-        self.__table_handers = {}
+        """ データ構造
+            __stack_items = {
+                "table_name" : {
+                    "(pk, sk)" : {
+                        "operation" : "Put|Delete",
+                        "key"  : { key },
+                        "item" : { item },
+                        "meta" : { ttl, ... }
+                    }
+                }
+            }
+        """
 
         # session 取得
-        session = session if session else Session()
+        self.__session = session if session else Session()
+        self.__region_name = region_name
 
         # client/resource 取得
-        self.__client = session.client('dynamodb', region_name=region_name)
-        self.__resource = session.resource('dynamodb', region_name=region_name)
+        self.__client = self.__session.client('dynamodb', region_name=region_name)
+        self.__resource = self.__session.resource('dynamodb', region_name=region_name)
 
-    def add_meta_handler(self, handler:DynamoTable):
-        self.__table_handers[handler.table_name] = handler
+
+    def set_meta_config(
+            self:Self,
+            table_name:str,
+            ttl_default:Union[int, datetime] = 0,
+            updated_at_attr:Optional[str] = "updated_at",
+            updated_at_format:Optional[str] = None,
+            time_zone:str = "Asia/Tokyo",
+        ):
+        self.__meta_configs[table_name] = DynamoTable(
+            table_name=table_name,
+            region_name=self.__region_name,
+            session=self.__session,
+            ttl_default=ttl_default,
+            updated_at_attr=updated_at_attr,
+            updated_at_format=updated_at_format,
+            time_zone=time_zone,
+        )
+
 
 
     def get_stacks(self) -> Dict[str, Dict[Tuple, Dict[str, Any]]]:
@@ -105,7 +119,7 @@ class DynamoBatchUpdater():
 
 
     def __set_meta_attr(self, table_name:str, item:Dict[str, Any], ttl:Union[int, datetime, None]) -> Dict[str, Any]:
-        table:DynamoTable = self.__table_handers.get(table_name, None)
+        table:DynamoTable = self.__meta_configs.get(table_name, None)
         if table is None:
             # テーブル設定が未セット時は無加工で返却
             return item
