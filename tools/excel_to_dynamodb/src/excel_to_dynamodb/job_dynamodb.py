@@ -3,13 +3,18 @@ import logging
 import json
 import re
 
+import boto3
+
 from .utils import dict_util as dict_util
 from .utils.dict_util import ChainableDict
 from .utils.format_ex import format_ex
 from .models.ExcelTable.ExcelTable import DataTables, DataTable, DataRecord
 
 from . import job_common
-from .utils.dynamodb_util import Table
+# from .utils.dynamodb_util import Table
+from .utils.dynamodb import DynamoBatchUpdater
+from .utils.dynamodb import DynamoTable
+
 
 
 logger = logging.getLogger(__name__)
@@ -137,45 +142,71 @@ def _make_records_for_dynamodb(
 
 
 def register_to_dynamodb(dynamodb_infos:List[Dict], variables:Dict) -> Dict[str, List[Dict]]:
+    """データをDynamoDBに登録（全テーブル）"""
+
     logger.debug(f"dynamodb_records: {len(dynamodb_infos)}")
 
-    results = []
+    
+    #----------------------------
+    # リージョン別に分割
+    #----------------------------
+
+    # デフォルトリージョンを取得
+    region_name_default:str = boto3.Session().region_name
+
+    # リージョン名で振り分け
+    dynamodb_infos_by_region:Dict[str, List] = {}
     for dynamodb_info in dynamodb_infos:
-        table_name:str = dynamodb_info["table_name"]
-        table_region:str = dynamodb_info.get("table_region", None)
-        pre_delete:Dict = dynamodb_info.get("pre-delete", {})
-        records:List[Dict] = dynamodb_info["records"]
-        logger.debug(f"table_name: {table_name}")
-        logger.debug(f"table_region: {table_region}")
-        logger.debug(f"pre_delete: {pre_delete}")
-        logger.debug(f"records: count={len(records)}")
+        table_region:str = dynamodb_info.get("table_region", None).strip()
+        table_region = table_region or region_name_default
+        if table_region not in dynamodb_infos_by_region.keys():
+            dynamodb_infos_by_region[table_region] = []
+        dynamodb_infos_by_region[table_region].append(dynamodb_info)
 
 
-        # 更新処理
-        pre_delete_index:str = pre_delete.get("index", None)
-        pre_delete_keys:Dict = pre_delete.get("keys", None)
-        table_handler:Table = Table(table_name=table_name, region_name=table_region)
+    #----------------------------
+    # リージョンごとに更新実行
+    #----------------------------
 
-        # レコード0件時は変数のみの条件で削除実行
-        if len(records) == 0:
-            pre_delete_keys = {
-                k: format_ex(v, var=variables)
-                for k,v in pre_delete_keys.items()
-            }
-            table_handler.delete_items(Items=pre_delete_keys)
-            return {}
+    for region_name, infos in dynamodb_infos_by_region.items():
+        # 一括登録モジュールを生成
+        dynamo_updater: DynamoBatchUpdater = DynamoBatchUpdater(region_name=region_name)
 
-        # テストのため更新処理スキップ
-        continue
+        # 更新定義ごとに実行
+        for info in infos:
+            __register_to_dynamotable(dynamo_updater=dynamo_updater, dynamodb_info=infos)
+            
+        # 更新
+        dynamo_updater.commit(transaction=True)
 
-        # 更新処理
-        ret = table_handler.delete_upsert(
-            UpdateItems=records,
-            IndexName=pre_delete.get("index",None),
-            KeyNames=pre_delete.get("keys", None),
-        )
-        results.append(table_handler)
-
-    return results
+    return {}
 
 
+def __register_to_dynamotable(dynamo_updater:DynamoBatchUpdater, dynamodb_info:Dict):
+    """データをDynamoDBに登録（テーブル別）"""
+
+    #----------------------------
+    # 設定データ取得
+    #----------------------------
+    table_name:str = dynamodb_info["table_name"]
+    table_region:str = dynamodb_info.get("table_region", None)
+    pre_delete:Dict = dynamodb_info.get("pre-delete", {})
+    records:List[Dict] = dynamodb_info["records"]
+    logger.debug(f"table_name: {table_name}")
+    logger.debug(f"table_region: {table_region}")
+    logger.debug(f"pre_delete: {pre_delete}")
+    logger.debug(f"records: count={len(records)}")
+
+    #----------------------------
+    # 削除／登録処理
+    #----------------------------
+    dynamo_updater.set_meta_config(table_name=table_name)
+    dynamo_table:DynamoTable = DynamoTable(table_name=table_name, region_name=table_region)
+
+    # 事前削除
+    if pre_delete:
+        delete_items:List[Dict] = dynamo_table.query2(key_items=pre_delete, primary_attr_only=True)
+        dynamo_updater.delete_items(table_name, items=delete_items)
+
+    # 追加/更新
+    dynamo_updater.put_items(table_name, items=records)

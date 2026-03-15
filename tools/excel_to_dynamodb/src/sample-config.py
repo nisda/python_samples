@@ -73,10 +73,7 @@ dynamodb_configs:List[Dict] = [
         "source" : "TBL_A",
         # 登録前削除設定。
         "pre-delete" : {
-            "index" : None,
-            "keys" : {
-                "system_id": "{var.system_name}",
-            },
+            "system_id": "{var.system_name}",
         },
         # 登録データテンプレート
         "template" : {
