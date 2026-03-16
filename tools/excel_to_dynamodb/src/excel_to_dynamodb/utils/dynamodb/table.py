@@ -81,8 +81,9 @@ class DynamoTable:
         )
 
         # LocalSecondaryIndex
+        lsi_list:List = self._table.local_secondary_indexes or []
         self._lsi = {}
-        for idx_info in sorted(self._table.local_secondary_indexes, key=lambda x: x["IndexName"]):
+        for idx_info in sorted(lsi_list, key=lambda x: x["IndexName"]):
             idx_name:str = idx_info["IndexName"]
             self._lsi[idx_name] = DynamoIndex(
                 table = self._table,
@@ -92,8 +93,9 @@ class DynamoTable:
             )
 
         # GlobalSecondaryIndex
+        gsi_list:List = self._table.global_secondary_indexes or []
         self._gsi = {}
-        for idx_info in sorted(self._table.global_secondary_indexes, key=lambda x: x["IndexName"]):
+        for idx_info in sorted(gsi_list, key=lambda x: x["IndexName"]):
             idx_name:str = idx_info["IndexName"]
             self._gsi[idx_name] = DynamoIndex(
                 table = self._table,
