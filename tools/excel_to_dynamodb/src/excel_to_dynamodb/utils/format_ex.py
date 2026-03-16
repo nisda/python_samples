@@ -1,18 +1,24 @@
 import re
+from typing import Union, List, Dict
 
-def format_ex(format:str, *args, **kwargs):
-    if not isinstance(format, str):
-        return format
+def format_ex(format:Union[str, List, Dict], *args, **kwargs):
 
-    if m:= re.fullmatch(pattern=r"\{([^\:}]*)\}", string=format):
-        expr:str = m.group(1)
-        if expr == "":
-            return args[0]
-        if re.fullmatch("\d+", expr):
-            return args[int(expr)]
-        return eval(expr, {}, kwargs)
+    if isinstance(format, str):
+        if m:= re.fullmatch(pattern=r"\{([^\:}]*)\}", string=format):
+            expr:str = m.group(1)
+            if expr == "":
+                return args[0]
+            if re.fullmatch("\d+", expr):
+                return args[int(expr)]
+            return eval(expr, {}, kwargs)
+        else:
+            return format.format(*args, **kwargs)
+    elif isinstance(format, list):
+        return [ format_ex(v, *args, **kwargs) for v in format ]
+    elif isinstance(format, dict):
+        return { k:format_ex(v, *args, **kwargs) for k,v in format.items() }
     else:
-        return format.format(*args, **kwargs)
+        return format
 
 
 if __name__ == '__main__':
@@ -35,6 +41,8 @@ if __name__ == '__main__':
         " {} {}",
         " {1}",
         " {1} {0}",
+        [" {1} {0}", "{aaa}/{bbb.name}"],
+        {"AAA:": " {1} {0}", "BBB": "{aaa}/{bbb.name}"},
     ]
 
     class Dummy():
@@ -49,5 +57,5 @@ if __name__ == '__main__':
     print("***************")
     for fmt in formats:
         ret = format_ex(fmt, "zero", ["one"], aaa="AAA", bbb=Dummy())
-        print(fmt.ljust(18) + f"-> {type(ret)} : {ret}")
+        print(str(fmt).ljust(30) + f"-> {type(ret)} : {ret}")
 
