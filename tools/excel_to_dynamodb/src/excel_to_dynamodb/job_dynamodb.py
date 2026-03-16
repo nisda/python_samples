@@ -58,6 +58,10 @@ def make_dynamodb_data(config_path:str, tables:DataTables, variables:Dict):
             format=dynamodb_config.get("table_region", None),
             **{"var": ChainableDict(variables)},
         )
+        dynamodb_config["pre-delete"] = format_ex(
+            format=dynamodb_config.get("pre-delete", None),
+            **{"var": ChainableDict(variables)},
+        )
 
     return {
         "dynamodb_infos": dynamodb_configs,
