@@ -10,24 +10,6 @@ from openpyxl.worksheet.worksheet import Worksheet
 from pathlib import Path
 from .excel_worksheet import ExcelWorksheet
 
-# class __StrEnumEx(StrEnum):
-#     @classmethod
-#     def _missing_(cls, value):
-#         if isinstance(value, str):
-#             for member in cls:
-#                 if member.value.casefold() == value.casefold():
-#                     return member
-#         return super()._missing_(value)
-
-# class Direction(__StrEnumEx):
-#     Vertical = auto()
-#     Horizontal = auto()
-
-
-# class Oriented(__StrEnumEx):
-#     Row = auto()
-#     Column = auto()
-
 
 class ExcelWorkbook:
 
@@ -122,7 +104,7 @@ class ExcelWorkbook:
 
 
 
-    def worksheets(self, pattern:str="*") -> List[Worksheet]:
+    def worksheets(self, pattern:str="*") -> List[ExcelWorksheet]:
         """ワークシート（複数）取得"""
         return [
             ExcelWorksheet(self.__wb[sheetname])
@@ -131,7 +113,7 @@ class ExcelWorkbook:
         ]
 
 
-    def worksheet(self, sheetname:str) -> Worksheet:
+    def worksheet(self, sheetname:str) -> ExcelWorksheet:
         """ワークシート取得"""
         if sheetname in self.sheetnames:
             return ExcelWorksheet(worksheet=self.__wb[sheetname])
