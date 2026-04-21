@@ -75,8 +75,8 @@ class ExcelWorksheet:
     def get_values(
             self, header:bool=False, skip_blank:bool=True,
             min_col:int|str="A", min_row:int=1, max_col:int|str=None,max_row:int=None,
-            read_direction:Union[Direction, str]=Direction.Vertical,
-            return_oriented:Union[Oriented, str]=Oriented.Row,
+            direction:Union[Direction, str]=Direction.Vertical,
+            return_type:Union[Oriented, str]=Oriented.Row,
         ) -> Union[List, Dict]:
         """指定シートからデータを読み込み"""
 
@@ -92,8 +92,8 @@ class ExcelWorksheet:
         min_row = self.__convert_coordinate(coord=min_row, default=1)
         max_col = self.__convert_coordinate(coord=max_col, default=0)
         max_row = self.__convert_coordinate(coord=max_row, default=0)
-        read_direction = Direction(read_direction)
-        return_oriented = Oriented(return_oriented)
+        direction = Direction(direction)
+        return_type = Oriented(return_type)
 
 
         #-----------------------------
@@ -113,7 +113,7 @@ class ExcelWorksheet:
             )
         ]
 
-        if read_direction == Direction.Horizontal:
+        if direction == Direction.Horizontal:
             # 横方向指定の場合は行/列を転置
             lines = list(map(list, zip(*lines)))
 
@@ -134,12 +134,12 @@ class ExcelWorksheet:
                 for x in lines
             ]
 
-            if return_oriented == Oriented.Column:
+            if return_type == Oriented.Column:
                 lines = {key: [d[key] for d in lines] for key in lines[0].keys()}
 
         else:
             # ヘッダなし
-            if return_oriented == Oriented.Column:
+            if return_type == Oriented.Column:
                 lines = list(map(list, zip(*lines)))
 
 

@@ -77,20 +77,20 @@ def test_direction():
     assert data[0] == SAMPLE_COL_NAMES
 
     # Vertical
-    data_v1 = sheet_v.get_values(min_row=2, read_direction=Direction.Vertical)
+    data_v1 = sheet_v.get_values(min_row=2, direction=Direction.Vertical)
     assert len(data_v1) == 6
     assert data_v1[0] == SAMPLE_COL_NAMES
 
-    data_v2 = sheet_v.get_values(min_row=2, read_direction="vertical")
+    data_v2 = sheet_v.get_values(min_row=2, direction="vertical")
     assert len(data_v2) == 6
     assert data_v2[0] == SAMPLE_COL_NAMES
 
     # Horizontal
-    data_h1 = sheet_h.get_values(min_row=2, read_direction=Direction.Horizontal)
+    data_h1 = sheet_h.get_values(min_row=2, direction=Direction.Horizontal)
     assert len(data_h1) == 6
     assert data_h1[0] == SAMPLE_COL_NAMES
 
-    data_h2 = sheet_h.get_values(min_row=2, read_direction="horiZonTAL")
+    data_h2 = sheet_h.get_values(min_row=2, direction="horiZonTAL")
     assert len(data_h2) == 6
     assert data_h2[0] == SAMPLE_COL_NAMES
 
@@ -108,14 +108,14 @@ def test_oriented():
     ret = sheet_v.get_values(min_row=2)
 
     # 行指向で返却
-    ret_r1 = sheet_v.get_values(min_row=2, return_oriented=Oriented.Row)
-    ret_r2 = sheet_v.get_values(min_row=2, return_oriented="row")
+    ret_r1 = sheet_v.get_values(min_row=2, return_type=Oriented.Row)
+    ret_r2 = sheet_v.get_values(min_row=2, return_type="row")
     assert ret == ret_r1
     assert ret == ret_r2
 
     # 列指向で返却
-    data_c1 = sheet_v.get_values(min_row=2, return_oriented=Oriented.Column)
-    data_c2 = sheet_v.get_values(min_row=2, return_oriented="column")
+    data_c1 = sheet_v.get_values(min_row=2, return_type=Oriented.Column)
+    data_c2 = sheet_v.get_values(min_row=2, return_type="column")
     assert data_c1 == data_c2
     assert len(data_c1) == len(SAMPLE_COL_NAMES)
 
@@ -134,7 +134,7 @@ def test_header():
     sheet_v = excel.worksheet(sheetname="縦持ち")
 
     # 行指向
-    data = sheet_v.get_values(min_row=2, header=True, return_oriented=Oriented.Row)
+    data = sheet_v.get_values(min_row=2, header=True, return_type=Oriented.Row)
     assert len(data) == 5
     assert list(data[0].keys()) == SAMPLE_COL_NAMES_UNIQUE
     assert isinstance(data[0]["name"], str)
@@ -142,7 +142,7 @@ def test_header():
     assert len(data[0]["favorites"]) == 3
 
     # 列指向
-    data = sheet_v.get_values(min_row=2, header=True, return_oriented=Oriented.Column)
+    data = sheet_v.get_values(min_row=2, header=True, return_type=Oriented.Column)
     assert list(data.keys()) == SAMPLE_COL_NAMES_UNIQUE
     assert data["id"] == [1, 2, 3, 4, 5]
     assert data["favorites"][0] == ["red", "cat", "apple"]
