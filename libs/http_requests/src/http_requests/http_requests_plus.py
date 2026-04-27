@@ -77,7 +77,7 @@ class RequestsPlus(_RequestsCore):
 
         # querystring をマージ
         combined_params: Dict[str, Any] = {
-            **self._base_params,
+            **(self._base_params or {}),
             **(params or {}),
         }
         # querystring の None を除去
@@ -88,7 +88,7 @@ class RequestsPlus(_RequestsCore):
 
         # headers をマージ
         combined_headers: Dict[str, Any] = {
-            **self._base_headers,
+            **(self._base_headers or {}),
             **(headers or {}),
         }
         # headers の None を除去
