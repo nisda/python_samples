@@ -488,7 +488,14 @@ class DataTable():
 
 
 
-    def join(self, table:Self, how:Literal["inner", "left", "right", "full", "cross"], left_on:List[str]=None, right_on:List[str]=None) -> Self:
+    def join(
+            self,table:Self,
+            how:Literal["inner", "left", "right", "full", "cross"],
+            left_on:List[str]=None,
+            right_on:List[str]=None,
+            left_prefix:str='left_',
+            right_prefix:str='right_',
+        ) -> Self:
         """
         テーブル結合
         新しい DataTable を返却する。現在の DataTable は更新しない。
@@ -555,7 +562,7 @@ class DataTable():
 
 
         # カラム名を調整
-        columns_joined = [ f"left_{c}" for c in columns_l] + [ f"right_{c}" for c in columns_r]
+        columns_joined = [ f"{left_prefix}{c}" for c in columns_l] + [ f"{right_prefix}{c}" for c in columns_r]
         return DataTable(data=joined_data, columns=columns_joined)
 
 
@@ -680,7 +687,7 @@ class DataTable():
 
     def convert(
             self,
-            key :str,
+            column :str,
             dtype :str|Type,
             params :str|list|dict = None,
             is_null :Any = None,
@@ -705,9 +712,9 @@ class DataTable():
             return DataConverter.convert(value=value, dtype=dtype, params=params)
 
 
-        col:List = self[key]
+        col:List = self[column]
         if col is None:
-            raise KeyError(f"Colymn '{key}' does not found.")
+            raise KeyError(f"Column '{column}' does not found.")
 
         ret = []
         ret_error_data = []

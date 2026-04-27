@@ -18,10 +18,10 @@ def test_convert():
     dt1 = DataTable(data=data)
 
     # データ型が変更されている
-    ret = dt1.convert(key="id", dtype="str")
+    ret = dt1.convert(column="id", dtype="str")
     assert ret == ["1", "2", "3"]
 
-    ret = dt1.convert(key="age", dtype="int")
+    ret = dt1.convert(column="age", dtype="int")
     assert ret == [None, 22, None]
 
     # テーブルは変更されていない
@@ -42,11 +42,11 @@ def test_isnull_nullif():
     dt1 = DataTable(data=data)
 
     # ISNULL変換（NULL -> 指定値）
-    ret = dt1.convert(key="sex", dtype="str", is_null="F")
+    ret = dt1.convert(column="sex", dtype="str", is_null="F")
     assert ret == ["F", "F", "M"]
 
     # NULLIF変換（指定値 -> NULL）
-    ret = dt1.convert(key="sex", dtype="str", null_if="M")
+    ret = dt1.convert(column="sex", dtype="str", null_if="M")
     assert ret == ["F", None, None]
 
 
@@ -64,7 +64,7 @@ def test_error_coerce():
 
     # 'coerce:強制(NULL)'
     error_data = []
-    ret = dt1.convert(key="age", dtype="int", errors='coerce', error_data=error_data)
+    ret = dt1.convert(column="age", dtype="int", errors='coerce', error_data=error_data)
 
     # 変換結果: エラーデータは None に変換される
     assert ret == [None, None, 40]
@@ -90,7 +90,7 @@ def test_error_ignore():
 
     # 'coerce:無視'
     error_data = []
-    ret = dt1.convert(key="age", dtype="int", errors='ignore', error_data=error_data)
+    ret = dt1.convert(column="age", dtype="int", errors='ignore', error_data=error_data)
 
     # 変換結果: エラーデータは無変換
     assert ret == [None, "XXX", 40]
@@ -118,7 +118,7 @@ def test_error_raise():
 
     # 'raise:例外発生'
     with pytest.raises(Exception) as e:
-        ret = dt1.convert(key="age", dtype="int", errors='raise')
+        ret = dt1.convert(column="age", dtype="int", errors='raise')
     assert "InvalidOperation" in str(e)
 
 
