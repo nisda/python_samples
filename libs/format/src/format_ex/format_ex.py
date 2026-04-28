@@ -1,4 +1,4 @@
-from typing import List, Dict, Tuple, Any, Self
+from typing import List, Dict, Tuple, Any, Self, Literal
 from string import Formatter
 from .dot_dict import DotDict4 as DotDict
 from .dot_dict import restore_dotdict
@@ -7,7 +7,7 @@ from .path_util import get_nested_data
 
 
 
-def format_map1(expr:str, mapping:dict, original_type:bool=False):
+def format_map1(expr:str, mapping:dict, original_type:bool=False, errors:Literal['raise', 'coerce', 'ignore']='raise'):
 
     # original_type 返却可否の判定
     is_original_type_convertible = False
@@ -30,10 +30,17 @@ def format_map1(expr:str, mapping:dict, original_type:bool=False):
 
     # format 実行
     if is_original_type_convertible:
-        # オリジナルタイプ返却の場合は'{}'を削除してeval実行
-        ret = eval(expr[1:-1], {}, data)
-
-        return restore_dotdict(ret) # dotdict から元の dict に戻す。
+        try:
+            # オリジナルタイプ返却の場合は'{}'を削除してeval実行
+            ret = eval(expr[1:-1], {}, data)
+            ret = restore_dotdict(ret) # dotdict から元の dict に戻す。
+            return ret
+        except Exception as e:
+            if errors == 'coerce':
+                return None
+            elif errors == 'ignore':
+                return expr
+            raise
 
     elif advanced := False:
         # 必ず False になる。通らない。
@@ -44,33 +51,39 @@ def format_map1(expr:str, mapping:dict, original_type:bool=False):
         return eval(f'f"{expr}"', {}, data)
 
     else:
-        return expr.format_map(data)
-
+        try:
+            return expr.format_map(data)
+        except Exception as e:
+            if errors == 'coerce':
+                return None
+            elif errors == 'ignore':
+                return expr
+            raise
 
 
 # 公開するバージョンを設定
 format_map = format_map1
 
 
-def format_recursive(template:Any, mapping:dict, original_type:bool=False):
+def format_recursive(template:Any, mapping:dict, original_type:bool=False, errors:Literal['raise', 'coerce', 'ignore']='raise'):
     """フォーマット適用（再帰処理）"""
 
     if isinstance(template, dict):
         return {
-            k: format_recursive(template=v, mapping=mapping, original_type=original_type)
+            k: format_recursive(template=v, mapping=mapping, original_type=original_type, errors=errors)
             for k,v in template.items()
         }
     elif isinstance(template, list):
         return [
-            format_recursive(template=v, mapping=mapping, original_type=original_type)
+            format_recursive(template=v, mapping=mapping, original_type=original_type, errors=errors)
             for v in template
         ]
     elif isinstance(template, tuple):
         return tuple([
-            format_recursive(template=v, mapping=mapping, original_type=original_type)
+            format_recursive(template=v, mapping=mapping, original_type=original_type, errors=errors)
             for v in template
         ])
     elif isinstance(template, str):
-        return format_map(template, mapping=mapping, original_type=original_type)
+        return format_map(template, mapping=mapping, original_type=original_type, errors=errors)
     else:
         return template
