@@ -2,9 +2,12 @@ from typing import List, Dict, Tuple, Any, Self
 from string import Formatter
 from .dot_dict import DotDict4 as DotDict
 from .dot_dict import restore_dotdict
+from .path_util import get_nested_data
 
 
-def format_map(expr:str, mapping:dict, original_type:bool=False, allow_missing:bool=False):
+
+
+def format_map1(expr:str, mapping:dict, original_type:bool=False):
 
     # original_type 返却可否の判定
     is_original_type_convertible = False
@@ -29,6 +32,7 @@ def format_map(expr:str, mapping:dict, original_type:bool=False, allow_missing:b
     if is_original_type_convertible:
         # オリジナルタイプ返却の場合は'{}'を削除してeval実行
         ret = eval(expr[1:-1], {}, data)
+
         return restore_dotdict(ret) # dotdict から元の dict に戻す。
 
     elif advanced := False:
@@ -44,3 +48,29 @@ def format_map(expr:str, mapping:dict, original_type:bool=False, allow_missing:b
 
 
 
+# 公開するバージョンを設定
+format_map = format_map1
+
+
+def format_recursive(template:Any, mapping:dict, original_type:bool=False):
+    """フォーマット適用（再帰処理）"""
+
+    if isinstance(template, dict):
+        return {
+            k: format_recursive(template=v, mapping=mapping, original_type=original_type)
+            for k,v in template.items()
+        }
+    elif isinstance(template, list):
+        return [
+            format_recursive(template=v, mapping=mapping, original_type=original_type)
+            for v in template
+        ]
+    elif isinstance(template, tuple):
+        return tuple([
+            format_recursive(template=v, mapping=mapping, original_type=original_type)
+            for v in template
+        ])
+    elif isinstance(template, str):
+        return format_map(template, mapping=mapping, original_type=original_type)
+    else:
+        return template
