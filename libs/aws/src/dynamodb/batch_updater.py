@@ -1,6 +1,6 @@
 from typing import List, Dict, Any, Tuple, Self, Union, Optional
 from datetime import datetime
-# from collections import defaultdict
+from collections import defaultdict
 
 from boto3 import Session
 
@@ -14,10 +14,11 @@ class DynamoBatchUpdater():
     def __init__(self:Self, region_name:Optional[str] = None, session:Optional[Session] = None,):
         """コンストラクタ"""
 
-        # メンバ変数
-        self.__meta_configs = {}
+        # メタデータ
+        self.__meta_configs:Dict[str, DynamoTable] = {}
 
-        self.__stack_items = {}
+        # スタックデータ
+        self.__stack_items:Dict[str, Dict[str, Any]] = defaultdict(dict)
         """ データ構造
             __stack_items = {
                 "table_name" : {
@@ -73,10 +74,6 @@ class DynamoBatchUpdater():
     def put_items(self, table_name:str, items:List[Dict[str, Any]], ttl:Union[int, datetime, None]=None, template:Dict=None) -> Dict[Tuple, Dict[str, Any]]:
         """データ追加"""
 
-        # スタックデータの初期化（初回のみ）
-        if table_name not in self.__stack_items:
-            self.__stack_items[table_name] = {}
-
         # テンプレート変換
         if isinstance(template, dict):
             items = [
@@ -102,10 +99,6 @@ class DynamoBatchUpdater():
     def delete_items(self, table_name:str, items:List[Dict[str, Any]], template:Dict=None) -> Dict[Tuple, Dict[str, Any]]:
         """データ削除"""
 
-        # スタックデータの初期化（初回のみ）
-        if table_name not in self.__stack_items:
-            self.__stack_items[table_name] = {}
-
         # テンプレート変換
         if isinstance(template, dict):
             items = [
@@ -128,8 +121,39 @@ class DynamoBatchUpdater():
         return self.get_stack(table_name=table_name)
 
 
+
+    def pre_delete(self, table_name:str, condition:Dict|List[Dict]) -> bool:
+        """事前削除(登録のみ) / commit前であればいつでもOK"""
+
+        # データ型を list に揃える
+        conditions = [condition] if isinstance(condition, dict) else condition
+        if not isinstance(conditions, list):
+            raise TypeError(f"type `{type(conditions)}` is not supported.")
+
+        # スタックに削除データを追加
+        for cond in conditions:
+            dynamo_table = self.__get_dynamo_table_obj(table_name=table_name)
+            delete_items:List[Dict] = dynamo_table.query2(key_items=cond, primary_attr_only=True)
+            for item in delete_items:
+                key:Dict = self.__get_primary_keys(table_name=table_name, item=item)
+                key_hash:Tuple = self.__make_hashable(key)
+                # スタックに存在していないキーのみを登録
+                if key_hash not in self.__stack_items[table_name].keys():
+                    self.__stack_items[table_name][key_hash] = {
+                        "operation" : "Delete",
+                        "key"  : key,
+                        "item" : None,
+                        "meta" : None,
+                    }
+
+        # 終了
+        return True
+
+
+
     def commit(self, transaction:bool=True) -> Dict[str, Dict[Tuple, Dict[str, Any]]]:
-        # 実行前スタックデータを退避
+
+        # 実行前スタックデータ（返却用）を退避
         stack_items = self.__stack_items.copy()
 
         # 実行
@@ -139,7 +163,7 @@ class DynamoBatchUpdater():
             self.__commit_batch_writer()
 
         # スタックデータ初期化
-        self.__stack_items = {}
+        self.__stack_items.clear()
 
         return stack_items
 
@@ -154,6 +178,21 @@ class DynamoBatchUpdater():
             # 設定時は table のファンクションで加工
             return table.set_meta_attr(item=item, ttl=ttl)
 
+
+
+    def __get_dynamo_table_obj(self, table_name:str) -> DynamoTable:
+        """DynamoTable オブジェクトを取得"""
+        
+        if table_name in self.__meta_configs.keys():
+            # meta_config で作成済みであればそれを取得
+            return self.__meta_configs[table_name]
+        else:
+            # 未作成の場合は新規作成
+            return DynamoTable(
+                table_name=table_name,
+                region_name=self.__region_name,
+                session=self.__session,
+            )
 
 
     def __commit_transaction(self) -> None:
