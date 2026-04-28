@@ -1,10 +1,12 @@
 from typing import List, Dict, Any, Tuple, Self, Union, Optional
 from datetime import datetime
+# from collections import defaultdict
 
 from boto3 import Session
 
 from .tools import DynamoTools
 from .table import DynamoTable
+from .libs.format_ex import format_recursive
 
 class DynamoBatchUpdater():
 
@@ -68,10 +70,21 @@ class DynamoBatchUpdater():
         return self.__stack_items[table_name]
 
 
-    def put_items(self, table_name:str, items:List[Dict[str, Any]], ttl:Union[int, datetime, None]=None) -> Dict[Tuple, Dict[str, Any]]:
+    def put_items(self, table_name:str, items:List[Dict[str, Any]], ttl:Union[int, datetime, None]=None, template:Dict=None) -> Dict[Tuple, Dict[str, Any]]:
+        """データ追加"""
+
+        # スタックデータの初期化（初回のみ）
         if table_name not in self.__stack_items:
             self.__stack_items[table_name] = {}
 
+        # テンプレート変換
+        if isinstance(template, dict):
+            items = [
+                format_recursive(template=template, mapping=v, original_type=True)
+                for v in items
+            ]
+
+        # データをスタックデータに保存
         for item in items:
             key:Dict = self.__get_primary_keys(table_name=table_name, item=item)
             key_hash:Tuple = self.__make_hashable(key)
@@ -82,13 +95,25 @@ class DynamoBatchUpdater():
                 "meta" : { "ttl": ttl },
             }
 
+        # 終了：現在のスタックを返却
         return self.get_stack(table_name=table_name)
 
 
-    def delete_items(self, table_name:str, items:List[Dict[str, Any]]) -> Dict[Tuple, Dict[str, Any]]:
+    def delete_items(self, table_name:str, items:List[Dict[str, Any]], template:Dict=None) -> Dict[Tuple, Dict[str, Any]]:
+        """データ削除"""
+
+        # スタックデータの初期化（初回のみ）
         if table_name not in self.__stack_items:
             self.__stack_items[table_name] = {}
 
+        # テンプレート変換
+        if isinstance(template, dict):
+            items = [
+                format_recursive(template=template, mapping=v, original_type=True)
+                for v in items
+            ]
+
+        # データをスタックデータに保存
         for item in items:
             key:Dict = self.__get_primary_keys(table_name=table_name, item=item)
             key_hash:Tuple = self.__make_hashable(key)
@@ -99,6 +124,7 @@ class DynamoBatchUpdater():
                 "meta" : None,
             }
 
+        # 終了：現在のスタックを返却
         return self.get_stack(table_name=table_name)
 
 
@@ -118,6 +144,7 @@ class DynamoBatchUpdater():
         return stack_items
 
 
+
     def __set_meta_attr(self, table_name:str, item:Dict[str, Any], ttl:Union[int, datetime, None]) -> Dict[str, Any]:
         table:DynamoTable = self.__meta_configs.get(table_name, None)
         if table is None:
@@ -130,6 +157,7 @@ class DynamoBatchUpdater():
 
 
     def __commit_transaction(self) -> None:
+        """Commit実行(トランザクションモード)"""
 
         # コマンドパラメータ生成
         transact_items: List[Dict] = []
@@ -164,7 +192,9 @@ class DynamoBatchUpdater():
         return
 
 
+
     def __commit_batch_writer(self) -> None:
+        """Commit 実行(BatchWriterモード)"""
  
         for table_name, commands in self.__stack_items.items():
 
