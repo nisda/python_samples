@@ -111,21 +111,21 @@ def test_get_nested_from_scalar(data, path, expected):
     ],
     [
         # dict に存在しないキー
-        pytest.param("b", KeyError, " at '. <dict>'"),
-        pytest.param("a.a", KeyError, " at '.a <dict>'"),
-        pytest.param("a.aa.0.aa1b", KeyError, " at '.a.aa.0 <dict>'"),
+        pytest.param("b", KeyError, "'b'. occurred at path='.'<dict>"),
+        pytest.param("a.a", KeyError, "'a'. occurred at path='.a'<dict>"),
+        pytest.param("a.aa.0.aa1b", KeyError, "'aa1b'. occurred at path='.a.aa.0'<dict>"),
 
         # list に存在しないインデックス
-        pytest.param("a.aa.1", IndexError, " at '.a.aa <list>'"),
+        pytest.param("a.aa.1", IndexError, "list index out of range. occurred at path='.a.aa'<list>"),
 
         # tuple に存在しないインデックス
-        pytest.param("a.ab.1", IndexError, " at '.a.ab <tuple>'"),
+        pytest.param("a.ab.1", IndexError, "tuple index out of range. occurred at path='.a.ab'<tuple>"),
 
         # list に文字列
-        pytest.param("a.aa.X", ValueError, " at '.a.aa <list>'"),
+        pytest.param("a.aa.X", ValueError, "invalid literal for int() with base 10: 'X'. occurred at path='.a.aa'<list>"),
 
         # list, tupe, dict 以外にノード指定
-        pytest.param("a.aa.0.aa1a.0", TypeError, " at '.a.aa.0.aa1a <str>'"),
+        pytest.param("a.aa.0.aa1a.0", TypeError, "Node specification is not supported. occurred at path='.a.aa.0.aa1a'<str>"),
     ]
 )
 def test_get_nested_from_dict(path, e_type, e_msg):
@@ -143,5 +143,4 @@ def test_get_nested_from_dict(path, e_type, e_msg):
 
     with pytest.raises(e_type) as e:
         ret = get_nested_data(data, path)
-    assert e_msg in str(e)
-    print(str(e))
+    assert e_msg in str(e.value)

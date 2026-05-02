@@ -1,9 +1,8 @@
-from typing import List
+from typing import List, Type
 import re
 from decimal import Decimal
 
 def get_nested_data(data, path):
-    """"""
 
     # a[0][b] -> ['a', '0', 'b'] に分解
     # a.0.b -> ['a', '0', 'b'] に分解
@@ -16,6 +15,7 @@ def get_nested_data(data, path):
             if isinstance(node, (list, tuple)):
                 node = node[int(p)]
             elif isinstance(node, dict):
+                
                 if p.isnumeric():
                     if int(p) in node.keys():
                         node = node[int(p)]
@@ -28,9 +28,12 @@ def get_nested_data(data, path):
                         continue
                 node = node[p]
             else:
-                raise TypeError(f"Node specification is not supported for type {type(node)}`.")
+                raise TypeError(f"Node specification is not supported.")
+            
         except Exception as e:
-            etype = type(e)
-            raise etype(f"{str(e)} at '.{".".join(process_nodes)} <{type(node).__name__}>'") from e
+            e_type:Type = type(e)
+            e_msg:str   = f"{str(e).rstrip('.')}. occurred at path='.{'.'.join(process_nodes)}'<{type(node).__name__}>"
+            raise e_type(e_msg) from e
+
         process_nodes.append(p)
     return node
