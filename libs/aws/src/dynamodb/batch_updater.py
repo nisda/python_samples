@@ -6,7 +6,8 @@ from boto3 import Session
 
 from .tools import DynamoTools
 from .table import DynamoTable
-from .libs.format_ex import format_recursive
+# from .libs.format_ex import format_recursive
+from .libs.format_ex import data_mapping
 
 class DynamoBatchUpdater():
 
@@ -77,7 +78,7 @@ class DynamoBatchUpdater():
         # テンプレート変換
         if isinstance(template, dict):
             items = [
-                format_recursive(template=template, mapping=v, original_type=True)
+                data_mapping(template=template, data=v, assign_dtype='original')
                 for v in items
             ]
 
@@ -102,7 +103,7 @@ class DynamoBatchUpdater():
         # テンプレート変換
         if isinstance(template, dict):
             items = [
-                format_recursive(template=template, mapping=v, original_type=True)
+                data_mapping(template=template, data=v, assign_dtype='original')
                 for v in items
             ]
 

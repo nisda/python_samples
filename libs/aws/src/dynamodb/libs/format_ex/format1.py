@@ -61,9 +61,6 @@ def format_map1(expr:str, mapping:dict, original_type:bool=False, errors:Literal
             raise
 
 
-# 公開するバージョンを設定
-format_map = format_map1
-
 
 def format_recursive(template:Any, mapping:dict, original_type:bool=False, errors:Literal['raise', 'coerce', 'ignore']='raise'):
     """フォーマット適用（再帰処理）"""
@@ -84,6 +81,6 @@ def format_recursive(template:Any, mapping:dict, original_type:bool=False, error
             for v in template
         ])
     elif isinstance(template, str):
-        return format_map(template, mapping=mapping, original_type=original_type, errors=errors)
+        return format_map1(template, mapping=mapping, original_type=original_type, errors=errors)
     else:
         return template
