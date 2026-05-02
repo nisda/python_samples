@@ -1,5 +1,5 @@
 
-from typing import List, Dict, Any, Literal, Type
+from typing import List, Dict, Any, Literal, Type, Tuple
 from string import Formatter
 from pprint import pprint
 from types import SimpleNamespace
@@ -9,24 +9,33 @@ import re
 import ast
 
 
-def extract_placeholders(expr:str, /) -> List[str]:
-    """stringに含まれるすべてのプレースホルダ―をリスト化"""
 
-    def __convert(expr:str) -> str:
-        s = expr
-        # s = re.sub(r'\.([a-zA-Z0-9_]+)', r'[\1]', expr)
-        # s = re.sub(r'\.([^\[\]\.]+)', r'[\1]', expr)
-        return s
+def extract_placeholders(expr:str|Dict|List|Tuple, /) -> List[str]:
+    """exprに含まれるすべてのプレースホルダ―をリスト化（再帰実行）"""
 
+    def __extract_from_str(expr:str) -> List[str]:
+        ret = []
+        for (literal_text, field_name, format_spec, conversion) in Formatter().parse(expr):
+            print(f"*** {literal_text} | {field_name} | {format_spec} | {conversion}")
+            if field_name:
+                ret.append(field_name)
+            if format_spec:
+                ret.extend(__extract_from_str(format_spec))
+        return ret
+
+    # 再帰実行
     if expr is None:
-        return []
+        ret = []
+    elif isinstance(expr, dict):
+        ret =  [ p for v in expr.values() for p in extract_placeholders(v) ]
+    elif isinstance(expr, (list, tuple)):
+        ret =  [ p for v in expr for p in extract_placeholders(v) ]
+    elif isinstance(expr, str):
+        ret =  __extract_from_str(expr)
+    else:
+        ret = []
 
-    ret = []
-    for (literal_text, field_name, format_spec, conversion) in Formatter().parse(expr):
-        if field_name:
-            ret.append(__convert(field_name))
-        ret.extend(extract_placeholders(format_spec))
-
+    # ユニーク化して返却
     return list(dict.fromkeys(ret))
 
 

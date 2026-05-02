@@ -7,11 +7,13 @@ from format_ex.format2 import is_fieldname_only
 
 
 
+"""プレースホルダー内の文言をすべて抽出"""
 @pytest.mark.parametrize(
     [
         "template", "expected",
     ],
     [
+        # formatパターン
         pytest.param("a.b", []),                                        # プレースホルダーなし
         pytest.param("{a.b}", ["a.b"]),                                 # プレースホルダーあり
         pytest.param("{a.b}_{c.d}_{e}", ["a.b", "c.d", "e"]),           # 複数
@@ -22,12 +24,38 @@ from format_ex.format2 import is_fieldname_only
         pytest.param("{a.b}_{{{{{{c.d}}}}}}_{e}", ["a.b", "e"]),        # エスケープ（6重） -> 文字列の{{{}}}
         pytest.param("_{a.b:_{c.d}_}", ["a.b", "c.d"]),                 # specのプレースホルダーも可（ここだけnest可能）
         pytest.param("_{a.b:_{c.d}_}_{c.d}_{a.b}", ["a.b", "c.d"]),     # 重複 -> ユニーク化
+
     ]
 )
 def test_extract_placeholders(template, expected):
-    """プレースホルダー内の文言をすべて抽出（ユニーク化済み）"""
     ret = extract_placeholders(template)
     assert ret == expected
+
+
+
+"""プレースホルダー内の文言をすべて抽出／ネスト構造"""
+def test_extract_placeholders_nest():
+    template = {
+        "a" : "{a}",
+        "aa" : "{a.aa}",
+        "aaa" : "{a.aa:789}",
+        "mix" : [
+            "{b.a}",
+            (
+                "{b.b}",
+                {"bc" : "{b.c:{m.mm.mmm:123}}"},
+                {"bd" : "{b.d}"},
+            ),
+        ],
+        "x" : "{{x.xx}}",
+        "y" : "{{{y.yy}}}",
+        "z" : "{{{{z.zz}}}}",
+    }
+    expected = ["a", "a.aa", "b.a", "b.b", "b.c", "m.mm.mmm", "b.d", "y.yy"]
+    ret = extract_placeholders(template)
+    assert ret == expected
+
+
 
 
 
