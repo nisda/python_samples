@@ -18,32 +18,32 @@ def test_filter():
 
     # 単一条件
     ret = dt.filter(condition={"id": 3})
-    rows = ret.rows()
+    rows = ret.rows(type='dict')
     assert len(rows) == 1
     assert rows[0]["id"] == 3
 
     # IN条件
     ret = dt.filter(condition={"id": [1, 3]})
-    rows = ret.rows()
+    rows = ret.rows(type='dict')
     assert len(rows) == 2
     assert rows[0]["id"] == 1
     assert rows[1]["id"] == 3
 
     # 複数条件（AND）
     ret = dt.filter(condition={"id": [1, 2], "age": 22})
-    rows = ret.rows()
+    rows = ret.rows(type='dict')
     assert len(rows) == 1
     assert rows[0]["id"] == 2
 
     # 複数条件（AND）別パターン
     ret = dt.filter(condition={"id": [1, 2], "age": None})
-    rows = ret.rows()
+    rows = ret.rows(type='dict')
     assert len(rows) == 1
     assert rows[0]["id"] == 1
 
     # 複数条件（OR)
     ret = dt.filter(condition=[{"id": [1, 2], "age": None}, {"sex": "M"}])
-    rows = ret.rows()
+    rows = ret.rows(type='dict')
     assert len(rows) == 2
     assert rows[0]["id"] == 1
     assert rows[1]["id"] == 3

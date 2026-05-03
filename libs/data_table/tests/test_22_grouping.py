@@ -20,7 +20,7 @@ def test_grouping_no_aggregation():
     dt = DataTable(data=data, columns=columns)
     dt1 = dt.grouping(group_by=["name"], aggregation={})
     rows = dt1.rows(type='list')
-    assert dt1.columns == ["name"]
+    assert dt1.columns == ("name",)
     assert dt1.row_count == 2
     assert rows[0] == ["apple" ]
     assert rows[1] == ["banana"]
@@ -29,7 +29,7 @@ def test_grouping_no_aggregation():
     dt = DataTable(data=data, columns=columns)
     dt2 = dt.grouping(group_by=["name", "color"], aggregation={})
     rows = dt2.rows(type='list')
-    assert dt2.columns == ["name", "color"]
+    assert dt2.columns == ("name", "color")
     assert dt2.row_count == 3
     assert rows[0] == ["apple" , "green"]
     assert rows[1] == ["apple" , "red"]
@@ -63,7 +63,7 @@ def test_grouping_and_aggregation():
         "quantity_sum": "sum(quantity)",
     })
     rows = dt1.rows(type='list')
-    assert dt1.columns == ["name", "cnt", 
+    assert dt1.columns == ("name", "cnt", 
         "date_cnt",
         "date_min",
         "date_max",
@@ -71,7 +71,7 @@ def test_grouping_and_aggregation():
         "price_max",
         "price_avg",
         "quantity_sum"
-    ]
+    )
     assert dt1.row_count == 2
     assert rows[0] == ["apple" , 4, 3, "2026/01/05", "2026/02/04", 90, 140, 110, 3900]
     assert rows[1] == ["banana", 1, 0, None, None, 80, 80, 80, 1200]
@@ -90,7 +90,7 @@ def test_grouping_and_aggregation():
         "quantity_sum": "sum(quantity)",
     })
     rows = dt2.rows(type='list')
-    assert dt2.columns == ["name", "color", "cnt", 
+    assert dt2.columns == ("name", "color", "cnt", 
         "date_cnt",
         "date_min",
         "date_max",
@@ -98,7 +98,7 @@ def test_grouping_and_aggregation():
         "price_max",
         "price_avg",
         "quantity_sum"
-    ]
+    )
     assert dt2.row_count == 3
     assert rows[0] == ["apple", "green"     , 1, 1, "2026/01/05", "2026/01/05", None, None, None, 400]
     assert rows[1] == ["apple", "red"       , 3, 2, "2026/01/20", "2026/02/04", 90, 140, 110, 3500]
@@ -153,7 +153,7 @@ def test_none():
     dt = DataTable(data=data, columns=columns)
     dt0 = dt.grouping()
     rows = dt0.rows()
-    assert dt0.columns == None
+    assert dt0.columns == ()
     assert dt0.column_count == 0
     assert dt0.row_count == 0
     assert rows == []

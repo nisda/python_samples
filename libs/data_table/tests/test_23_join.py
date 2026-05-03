@@ -52,21 +52,22 @@ def e_columns_2() -> List[str]:
 
 
 def test_cross_join(dt_1:DataTable, dt_2:DataTable, e_columns_1:List[str], e_columns_2:List[str]):
+    """CROSS JOIN"""
 
-    # cross join
+
     ret = dt_1.join(table=dt_2, how="cross")
-    assert ret.columns == e_columns_1 + e_columns_2
+    assert ret.columns == tuple(e_columns_1 + e_columns_2)
     assert ret.row_count == dt_1.row_count * dt_2.row_count
 
 
 
 def test_inner_join(dt_1:DataTable, dt_2:DataTable, e_columns_1:List[str], e_columns_2:List[str]):
+    """INNER JOIN"""
 
-    # inner join
     ret = dt_1.join(table=dt_2, how="inner", left_on=["fruits", "color"], right_on=["name", "color"])
     rows = ret.rows(type='list')
 
-    assert ret.columns == e_columns_1 + e_columns_2
+    assert ret.columns == tuple(e_columns_1 + e_columns_2)
     assert ret.row_count == 3
     assert [1, "apple", "r", 100, "apple", "r", "apple"] in rows
     assert [2, "berry", None, 200, "berry", None, "unknown berry"] in rows
@@ -74,12 +75,12 @@ def test_inner_join(dt_1:DataTable, dt_2:DataTable, e_columns_1:List[str], e_col
 
 
 def test_left_join(dt_1:DataTable, dt_2:DataTable, e_columns_1:List[str], e_columns_2:List[str]):
+    """LEFT JOIN"""
 
-    # left join
     ret = dt_1.join(table=dt_2, how="left",left_on=["fruits", "color"],right_on=["name", "color"])
     rows = ret.rows(type='list')
 
-    assert ret.columns == e_columns_1 + e_columns_2
+    assert ret.columns == tuple(e_columns_1 + e_columns_2)
     assert ret.row_count == 5
     assert [1, "apple", "r", 100, "apple", "r", "apple"] in rows
     assert [2, "berry", None, 200, "berry", None, "unknown berry"] in rows
@@ -89,12 +90,12 @@ def test_left_join(dt_1:DataTable, dt_2:DataTable, e_columns_1:List[str], e_colu
 
 
 def test_right_join(dt_1:DataTable, dt_2:DataTable, e_columns_1:List[str], e_columns_2:List[str]):
+    """RIGHT JOIN"""
 
-    # right join
     ret = dt_1.join(table=dt_2, how="right",left_on=["fruits", "color"],right_on=["name", "color"])
     rows = ret.rows(type='list')
 
-    assert ret.columns == e_columns_1 + e_columns_2
+    assert ret.columns == tuple(e_columns_1 + e_columns_2)
     assert ret.row_count == 7
     assert [1, "apple", "r", 100, "apple", "r", "apple"] in rows
     assert [2, "berry", None, 200, "berry", None, "unknown berry"] in rows
@@ -107,12 +108,12 @@ def test_right_join(dt_1:DataTable, dt_2:DataTable, e_columns_1:List[str], e_col
 
 
 def test_full_join(dt_1:DataTable, dt_2:DataTable, e_columns_1:List[str], e_columns_2:List[str]):
+    """FULL JOIN"""
 
-    # full join
     ret = dt_1.join(table=dt_2, how="full",left_on=["fruits", "color"],right_on=["name", "color"])
     rows = ret.rows(type='list')
 
-    assert ret.columns == e_columns_1 + e_columns_2
+    assert ret.columns == tuple(e_columns_1 + e_columns_2)
     assert ret.row_count == 9
     assert [1, "apple", "r", 100, "apple", "r", "apple"] in rows
     assert [2, "berry", None, 200, "berry", None, "unknown berry"] in rows

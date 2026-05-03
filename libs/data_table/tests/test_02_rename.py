@@ -16,11 +16,11 @@ def test_column_rename():
         "age" : [None    , "22"  ,            ],
     }
     dt1 = DataTable(data=data)
-    assert dt1.columns == ["id", "name", "sex", "age"]
+    assert dt1.columns == tuple(["id", "name", "sex", "age"])
 
     # 列名変更
     dt1.rename(columns={"sex": "gender", "id": "person_id"})
-    assert dt1.columns == ["person_id", "name", "gender", "age"]
+    assert dt1.columns == tuple(["person_id", "name", "gender", "age"])
 
     # データを取ってみる
     assert dt1["gender"] == ["F"     , None  , "M"      , ]

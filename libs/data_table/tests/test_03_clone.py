@@ -7,7 +7,7 @@ from datetime import datetime
 
 
 def test_load_col_oriented():
-    """列指向データの読み込み"""
+    """列指向データ"""
 
     data = {
         "id"  : [1       ,  2    , 3        , ],
@@ -62,4 +62,4 @@ def test_load_row_oriented_list_no_column():
     # データ変更が元のテーブルには反映されないこと
     dt2["add"] = 1
     assert dt1.column_count != dt2.column_count
-    assert dt1.columns == dt2.columns   # 列名を持っていないので同じになる
+    assert dt1.columns != dt2.columns

@@ -1,13 +1,12 @@
-
-from typing import Tuple, List, Dict, Any, Union, Self, overload, Type, Optional, Final, Literal, Callable
-from collections.abc import Iterator
+from typing import Tuple, List, Dict, Any, Union, Self, overload, Type, Optional, Final, Literal, Callable, Set
 from itertools import zip_longest, product
 from functools import cmp_to_key
-from enum import StrEnum, auto
 from collections import defaultdict
 import re
 import statistics
 from .libs.data_converter import DataConverter
+from collections import Counter
+import copy
 
 
 
@@ -42,14 +41,8 @@ class DataTable():
             ret = []
             for key in search:
                 if key in values:
-                    # そのまま存在する場合
+                    # 存在する場合
                     ret.append(values.index(key))
-
-                elif compare_int_str and isinstance(key, str) \
-                    and key.isnumeric() and int(key) in values:
-                    # int型に変換して比較する
-                    ret.append(values.index(int(key)))
-
                 else:
                     # マッチしない場合は None
                     ret.append(None)
@@ -160,36 +153,46 @@ class DataTable():
 
 
     @property
-    def columns(self) -> List[str] | None:
+    def columns(self) -> Tuple[str]:
         """カラム名のリスト"""
-        return self.__columns
+        return tuple(self.__columns)
 
 
     @columns.setter
     def columns(self, value:List[str]|None):
-        """カラム名のリスト（setter）"""
+        """カラム名のリスト[setter]"""
+
+        # None の場合は連番[str]をセット
+        if value is None:
+            col_len:int = len(self.__records[0]) if self.__records else 0
+            self.__columns = [ str(i) for i in range(0, col_len) ]
+            return
 
         # データ型チェック
-        if not ( isinstance(value, list) or value is None ):
-            raise TypeError("Type of `columns` must be 'List' or 'None'.")
+        if not isinstance(value, (List, Tuple)):
+            raise TypeError("Type of `columns` must be 'list' or 'tuple'")
 
-        if value is None:
-            # None は無条件でセット
-            self.__columns = None
-        elif self.row_count == 0:
-            # データが0件場合は無条件でセット
-            self.__columns = value.copy()
-        elif self.column_count == len(value):
-            # それ以外の場合はデータのカラム数と一致していればOK
-            self.__columns = value.copy()
-        else:
-            # カラム数と一致していない場合はエラー
+        # カラム名の変換および重複チェック
+        str_columns = [ str(v) for v in value ]
+        dup_keys:List[str] = [ k for k,v in Counter(str_columns).items() if v > 1 ]
+        if dup_keys:
+            error_keys:List[str] = [
+                f"{i}:{x} <{type(x).__name__}>" for i, x in enumerate(str_columns)
+                if str(x) == dup_keys[0]
+            ]
+            raise ValueError(f"column names are duplicated. ({','.join(error_keys)})")
+
+        # 列数チェック＆セット
+        if not ( self.row_count == 0 or self.column_count == len(str_columns) ):
             raise ValueError("The `column` length does not match the data-length.")
 
-    @property
-    def __columns_alt(self) -> List[str]:
-        """カラム名リスト／非存在時はカラム番号"""
-        return self.columns if self.columns else list(range(0, self.column_count))
+        # カラム名セット（更新）
+        self.__columns = str_columns
+
+    # @property
+    # def __columns_alt(self) -> List[str]:
+    #     """カラム名リスト／非存在時はカラム番号"""
+    #     return self.columns if self.columns else list(range(0, self.column_count))
 
     @property
     def row_count(self) -> int:
@@ -199,12 +202,12 @@ class DataTable():
     @property
     def column_count(self) -> int:
         """カラム数"""
-        if self.columns is not None:
-            # カラム名が設定されているときはその長さ
-            return len(self.columns)
-        elif 0 < self.row_count:
+        if 0 < self.row_count:
             # データが１件でも存在する場合はその長さ
             return len(self.__records[0])
+        elif self.columns is not None:
+            # カラム名が設定されているときはその長さ
+            return len(self.columns)
         else:
             # 計測不能
             return 0
@@ -213,6 +216,10 @@ class DataTable():
 
     @overload
     def __init__(self, data:Dict[str, List[Any]], columns:List[str]=None):
+        pass
+
+    @overload
+    def __init__(self, data:Dict[str, Any], columns:List[str]=None):
         pass
 
     @overload
@@ -232,116 +239,136 @@ class DataTable():
         pass
 
 
-    # コンストラクタ
+
+    # コンストラクタ（本体）
     def __init__(self, data, columns:List[str]=None):
         """コンストラクタ"""
 
-        # 初期処理：データ読み込み
-        self.__load_data(data=data, columns=columns)
+        # 初期化
+        self.__columns: List[str]       = []
+        self.__records: List[List[Any]] = []
+
+
+        # データ読み込み
+        keys, recs = self.__load_records(data=data)
+
+        # レコードをセット
+        self.__records = recs
+
+        # カラム名をセット
+        if columns:
+            # columns 指定がある場合はそれをセット
+            self.columns = columns
+        else:
+            # columns 指定が無ければデータから読み込んだカラム名をセット
+            self.columns = keys
 
 
     # 初期処理: データ読み込み（振り分け）
-    def __load_data(self, data, columns:List[str]):
+    def __load_records(self, data) -> Tuple[List[str]|None, List[List[Any]]]:
         """データ読み込み"""
 
-        # 初期化
-        self.__columns: Optional[List[str]] = None
-        self.__records: List[List[Any]]     = []
 
+        #------------------------------------------
+        # データタイプ別の読み込み
+        #------------------------------------------
         if data is None:
-            # None の場合は空テーブル（初期化済み）
-            pass
+            # 空テーブル
+            return (None, [])
 
-        elif isinstance(data, dict):
-            # dict の場合は列指向データ: Dict[List] として処理
-            cols, rows = self.__load_col_oriented(data=data)
-            self.__records = rows
-            self.__columns = cols
+        elif isinstance(data, Dict):
 
-        elif isinstance(data, list):
-            # list の場合は行指向データとして処理。List[List] | List[Dict]
             if len(data) == 0:
-                self.__records = []
-                self.__columns = None
-            elif isinstance(data, list) and isinstance(data[0], dict):
-                cols, rows = self.__load_row_oriented_dict(data=data)
-                self.__records = rows
-                self.__columns = cols
-            elif isinstance(data, list) and isinstance(data[0], list):
-                cols, rows = self.__load_row_oriented_list(data=data)
-                self.__records = rows
-                self.__columns = cols
-            else:
-                cols, rows = self.__load_list(data=data)
-                self.__records = rows
-                self.__columns = cols
-        else:
-            cols, rows = self.__load_one(data=data)
-            self.__records = rows
-            self.__columns = cols
+                # 空テーブル
+                return (None, [])
 
-        # columns 指定がある場合はそれで上書き
-        if columns is not None:
-            self.columns = columns
+            elif isinstance(data[tuple(data.keys())[0]], (List, Tuple)):
+                # Dict[str, List[Any]]: 列指向データ
+                return self.__load_col_oriented(data=data)
+
+            else:
+                # Dict[str, Any]
+                # List[Dict[str, Any]] 形式に変換して行指向データとして処理
+                return self.__load_row_oriented_dict(data=[data])
+
+        elif isinstance(data, (List, Tuple)):
+
+            if len(data) == 0:
+                # 空テーブル
+                return (None, [])
+
+            elif isinstance(data[0], Dict):
+                # List[Dict[str, Any]]: 行指向データ（カラム名あり）
+                return self.__load_row_oriented_dict(data=data)
+
+            elif isinstance(data[0], List):
+                # List[List[Any]]: 行指向データ（カラム名なし）
+                return self.__load_row_oriented_list(data=data)
+
+            else:
+                # List[Any]: 1列／複数レコード
+                # List[List[Any]]（縦持ち）に変換して読み込み
+                return self.__load_row_oriented_list(data=[ [d] for d in data])
+
+        else:
+            # Any: 1データのみ
+            # List[List[Any]]に変換して読み込み
+            return self.__load_row_oriented_list(data=[[data]])
 
 
     # 初期処理: データ読み込み（列指向データ）
     def __load_col_oriented(self, data:Dict[str, List[Any]]) -> Tuple[List[str], List[List[Any]]]:
         """列指向データ読み込み"""
 
+        # カラム名を取得
         keys: List[str] = list(data.keys())
+
+        # データを行指向に変換。データ数不足はNone埋め。
         records: List[List[Any]] = [
             list(row) for row in zip_longest(*data.values(), fillvalue=None)
         ]
+
+        # 返却
         return keys, records
 
 
-    # 初期処理: データ読み込み（行指向データ／列名あり[dict]）
+    # 初期処理: データ読み込み（行指向データ／カラム名あり[dict]）
     def __load_row_oriented_dict(self, data:List[Dict[str, Any]]) -> Tuple[List[str], List[List[Any]]]:
-        """行指向データ（列名あり）読み込み"""
+        """行指向データ（カラム名あり）読み込み"""
 
+        # 全レコードのキーを抽出してユニーク化。
         keys: List[str] = list(dict.fromkeys([key for d in data for key in d.keys()]))
+
+        # 全レコードをキー順にリスト化。非存在キーは None 埋め。
         records: List[List[Any]] = [
             [d.get(k, None) for k in keys] for d in data
         ]
+
+        # 返却
         return keys, records
 
 
-    # 初期処理: データ読み込み（行指向データ／列名なし[list]）
+    # 初期処理: データ読み込み（行指向データ／カラム名なし[list]）
     def __load_row_oriented_list(self, data:List[Any]) -> Tuple[None, List[List[Any]]]:
-        """行指向データ（列名なし）読み込み"""
+        """行指向データ（カラム名なし）読み込み"""
 
-        max_len:int = max([len(d) for d in data])
-        records: List[List[Any]] = [
-            # 長さを max_len に揃える。不足分は None 埋め。
-            (values + ([None] * max_len))[0:max_len]
-            for values in data
+        # 1. 最大の列数を取得
+        max_len = max(len(row) for row in data)
+        
+        # 2. 各行が最大列数になるまで None を追加
+        records: List[List[Any]] =[
+            row + [None] * (max_len - len(row))
+            for row in data
         ]
+
         return None, records
 
-
-    # 初期処理: データ読み込み（リスト）
-    def __load_list(self, data:List[Any]) -> Tuple[None, List[List[Any]]]:
-        """リスト読み込み"""
-
-        # 1行=1データとして読み込み
-        records: List[List[Any]] = [[value] for value in data]
-        return None, records
-
-
-    # 初期処理: データ読み込み（データ単体）
-    def __load_one(self, data:Any) -> Tuple[None, List[List[Any]]]:
-        """１データ読み込み"""
-
-        # 1データとして読み込み
-        records: List[List[Any]] = [[data]]
-        return None, records
 
 
     # DataTable複製
     def clone(self) -> Self:
         """DataTable複製"""
-        columns = self.columns
+        columns = self.__columns
         records = self.rows(type='list')
         return DataTable(data=records, columns=columns)
 
@@ -350,10 +377,6 @@ class DataTable():
         # list のときはそのままセット（ self.columns と同一 ）
         if isinstance(columns, list):
             self.columns = columns
-
-        # 現在のカラム名を確認
-        if self.columns is None:
-            raise ReferenceError("The 'columns' is not set.")
 
         # 新しい名前に置き換えつつカラム名リストを生成
         new:List[Any] = []
@@ -370,22 +393,18 @@ class DataTable():
 
 
     # レコード取得（行指向データ）
-    def rows(self, type:Literal['auto', 'dict', 'list']='auto', columns:List[str|int]=None) -> List[Dict[str, Any]] | List[List[str]]:
+    def rows(self, type:Literal['list', 'dict']='list', columns:List[str]=None) -> List[Dict[str, Any]] | List[List[str]]:
         """データ参照（行指向データとして）"""
 
-        # パラメータ調整 & チェック
-        type = type.lower()
-        if type == 'auto':
-            # type = auto のときは columns の有無で type を再設定する。
-            type = 'dict' if self.columns else 'list'
-
-
         # データ整形、返却
-        if type == 'dict':
+        if type == 'list':
+            # データ整形＆返却
+            return self.__records
+        else:
             # column 補正: 取得columns未指定のときは全項目
-            columns = columns or self.__columns_alt
+            columns = columns or self.columns
             # column_index 取得
-            col_idxs:List[int] = self._Tools.indexes(values=self.__columns_alt, search=columns)
+            col_idxs:List[int] = self._Tools.indexes(values=self.columns, search=columns)
             # データ整形＆返却
             return [
                 dict(zip(
@@ -394,38 +413,30 @@ class DataTable():
                 ))
                 for rec in self.__records
             ]
-        else:
-            # データ整形＆返却
-            return self.__records
 
 
     # レコード取得（列指向データ）
-    def cols(self, type:Literal['auto', 'dict', 'list']='auto', columns:List[str|int]=None) -> Dict[str, List[Any]] | List[List[str]]:
+    def cols(self, type:Literal['list', 'dict']='list', columns:List[str]=None) -> Dict[str, List[Any]] | List[List[str]]:
         """データ参照（列指向データとして）"""
 
-        # パラメータ調整 & チェック
-        type = type.lower()
-        if type == 'auto':
-            # type = auto のときは columns の有無で type を再設定する。
-            type = 'dict' if self.columns else 'list'
-
         # データ整形、返却
-        if type == 'dict':
-            # column 補正: 取得columns未指定のときは全項目
-            columns = columns or self.__columns_alt
-            # column_index 取得
-            col_idxs:List[int] = self._Tools.indexes(values=self.__columns_alt, search=columns)
-            # データ整形＆返却
-            return {
-                columns[i]: [ v[c_idx] for v in self.__records ]
-                for i, c_idx in enumerate(col_idxs)
-            }
-        else:
+        if type == 'list':
             # データ整形＆返却
             return [
                 [ rec[i] for rec in self.__records ]
                 for i in range(0, self.column_count)
             ]
+
+        else:
+            # column 補正: 取得columns未指定のときは全項目
+            columns = columns or self.columns
+            # column_index 取得
+            col_idxs:List[int] = self._Tools.indexes(values=self.columns, search=columns)
+            # データ整形＆返却
+            return {
+                columns[i]: [ v[c_idx] for v in self.__records ]
+                for i, c_idx in enumerate(col_idxs)
+            }
 
 
 
@@ -434,11 +445,11 @@ class DataTable():
         """列データ取得"""
 
         # カラムが存在しない場合は None
-        if key not in self.__columns_alt:
+        if key not in self.columns:
             return None
 
         # 指定カラムのみを抽出して返却
-        idx:int = self.__columns_alt.index(key)
+        idx:int = self.columns.index(key)
         return [
             row[idx]
             for row in self.__records
@@ -446,34 +457,37 @@ class DataTable():
 
 
     """列データ追加/更新"""
-    def __setitem__(self, key:str|int, value:Any):
+    def __setitem__(self, key:str, value:Any):
         """列データ追加/更新"""
+    
+        # データ型を調整
+        key = str(key)
 
         # リストの場合はレコード数と同数であること。
         is_array:bool = self._Tools.is_array(value)
         if is_array and len(value) != self.row_count:
             raise ValueError("Length of values does not match row-count.")
 
-        # データを調整
+        # データの数を調整
         values:List[str] = list(value) if is_array else [value] * self.row_count
 
-        if key not in self.__columns_alt:
+        # セット（追加/更新判定）
+        if key not in self.columns:
             # カラムが存在しない場合は追加
+            self.__columns.append(key)
             for i in range(0, self.row_count):
                 self.__records[i].append(values[i])
-            if self.__columns:
-                self.__columns.append(key)
         else:
             # カラムが存在する場合は更新
-            idx:int = self.__columns_alt.index(key)
+            idx:int = self.columns.index(key)
+            self.__columns[idx] = key
             for i in range(0, self.row_count):
                 self.__records[i][idx] = values[i]
-            if self.__columns:
-                self.__columns[idx] = key
 
         return
 
 
+    """フィルタリング"""
     def filter(self, condition:Dict[str, Any]|List[Dict[str, Any]]) -> Self:
         """
         フィルタリング（条件抽出）
@@ -481,13 +495,13 @@ class DataTable():
         """
 
         data = [
-            d for d in self.rows()
+            d for d in self.rows(type='dict')
             if self._Tools.is_contains(data=d, condition=condition)
         ]
         return DataTable(data=data)
 
 
-
+    """テーブル結合"""
     def join(
             self,table:Self,
             how:Literal["inner", "left", "right", "full", "cross"],
@@ -508,16 +522,19 @@ class DataTable():
                 raise ValueError("The `on` keyword cannot be used in cross-joins.")
         else:
             # その他のJOIN:
+
+            # on は必須
             if not all([left_on, right_on]):
-                # on は必須
                 raise ValueError(f"In an {how}-join, `on` is required.")
+
+            # left_on と right_on の数は一致する必要あり
             if len(left_on) != len(right_on):
-                # left_on と right_on の数は一致する必要あり
                 raise ValueError("The number of left_on and right_on do not match.")
 
+
         # JOIN方法によって分岐
-        columns_l:List[str|int] = self.__columns_alt
-        columns_r:List[str|int] = table._DataTable__columns_alt
+        columns_l:List[str|int] = self.columns
+        columns_r:List[str|int] = table.columns
 
         if how == 'cross':
             # cross-join: 全ての組み合わせ
@@ -566,10 +583,10 @@ class DataTable():
         return DataTable(data=joined_data, columns=columns_joined)
 
 
-
+    """グループ化＆集計"""
     def grouping(self, group_by:List[str]=[], aggregation:Dict[str, str]={}) -> Self:
         """
-        グループ化
+        グループ化＆集計
         新しい DataTable を返却する。現在の DataTable は更新しない。
         """
 
@@ -607,13 +624,13 @@ class DataTable():
             # 入力チェック
             if aggre_info[1] not in ('count', 'max', 'min', 'sum', 'avg'):
                 raise SyntaxError(f"Choose an aggregation function from the following options: ('count', 'max', 'min', 'sum', 'avg')")
-            if aggre_info[2] not in ("*", *self.__columns_alt):
+            if aggre_info[2] not in ("*", *self.columns):
                 raise KeyError(f"Column `{aggre_info[2]}` is not found.")
             if aggre_info[2] == "*" and aggre_info[1] != "count":
                 raise SyntaxError(f"The '*' character can only be used in `count`.")
 
             # 解析情報を調整
-            key_index:int = -1 if aggre_info[2] == "*" else self.__columns_alt.index(aggre_info[2])
+            key_index:int = -1 if aggre_info[2] == "*" else self.columns.index(aggre_info[2])
             aggre_info = (*aggre_info, key_index)
 
             # 解析情報をリスト化
@@ -627,7 +644,7 @@ class DataTable():
         else:
             grouped_rows = self._Tools.grouping_rows(
                 data=self.__records,
-                indexes=self._Tools.indexes(values=self.__columns_alt, search=group_by)
+                indexes=self._Tools.indexes(values=self.columns, search=group_by)
             )
 
 
@@ -662,10 +679,7 @@ class DataTable():
                     new_row.append(ret)
                     # print(f"  {name} | {idx}:{key} | {func_name}({cols}) -> {ret}")
             new_records.append(new_row)
-        # print("================")
-        # print(new_columns)
-        # print(new_records)
-        # print("================")
+
 
         #--------------------------------
         # 新しい DataTable オブジェクトを作成して返却
@@ -674,17 +688,18 @@ class DataTable():
 
 
 
+    """ソート"""
     def sort(self, sort_by:List[str]) -> Self:
         """
         ソート
         現在の DataTable のデータを指定項目の昇順に並び替える。
         """
-        col_idxs:List[int] = self._Tools.indexes(values=self.__columns_alt, search=sort_by)
+        col_idxs:List[int] = self._Tools.indexes(values=self.columns, search=sort_by)
         self.__records = sorted(self.__records, key=cmp_to_key(lambda x,y: self._Tools.custom_compare(x, y, keys=col_idxs)))
         return self
 
 
-
+    """データ変換"""
     def convert(
             self,
             column :str,
@@ -747,3 +762,53 @@ class DataTable():
 
         # 終了
         return ret
+
+
+
+
+
+    """list/dictデータの展開(レコード増幅)"""
+    def explode(self, key:str, sep:str='_') -> Self:
+        """list/dictデータの展開(レコード増幅)"""
+
+        # カラム存在チェック
+        if key not in self.columns:
+            raise KeyError(key)
+
+        new_keys:List[str] = []
+        buf:List = []
+        for row in self.rows(type='dict'):
+            key_item:Any = row[key]
+            if isinstance(key_item, (List, Tuple)):
+                # list/tuple の場合は展開してレコード増幅
+                if len(key_item) == 0:
+                    new_row:Dict[str, Any] = copy.deepcopy(row)
+                    new_row[key] = None
+                    buf.append(new_row)
+                else:
+                    for v in key_item:
+                        new_row:Dict[str, Any] = copy.deepcopy(row)
+                        new_row[key] = v
+                        buf.append(new_row)
+            elif isinstance(key_item, Dict):
+                # dict の場合はカラム増幅
+                new_row:Dict[str, Any] = copy.deepcopy(row)
+                for k, v in key_item.items():
+                    new_key:str = f"{key}{sep}{k}"
+                    new_row[new_key] = v
+                    if new_key not in new_keys:
+                        new_keys.append(new_key)
+                new_row[key] = None
+                buf.append(new_row)
+            else:
+                buf.append(row)
+
+        #  並び替え済みのカラム名（未使用）
+        key_idx:int = self.columns.index(key)
+        reorderd_keys:List[str] = (
+            list(self.columns[0:key_idx])
+            + new_keys
+            + list(self.columns[key_idx+1:])
+        )
+
+        return DataTable(data=buf)

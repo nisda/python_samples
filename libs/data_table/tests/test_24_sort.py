@@ -15,14 +15,14 @@ def test_sort():
 
     # カラム、データの確認
     dt = DataTable(data=data)
-    rows = list(dt.rows())
-    assert dt.columns == ["id", "name", "sex", "age"]
+    rows = list(dt.rows(type='dict'))
+    assert dt.columns == ("id", "name", "sex", "age")
     assert len(rows) == len(data)
 
     # sex でソート
     dt = dt.sort(sort_by=["sex"])
-    rows = list(dt.rows())
-    assert dt.columns == ["id", "name", "sex", "age"]
+    rows = list(dt.rows(type='dict'))
+    assert dt.columns == ("id", "name", "sex", "age")
     assert len(rows) == len(data)
     assert rows[0]["id"] == 2
     assert rows[1]["id"] == 1
@@ -30,8 +30,8 @@ def test_sort():
 
     # age, sex でソート
     dt = dt.sort(sort_by=["age", "sex"])
-    rows = list(dt.rows())
-    assert dt.columns == ["id", "name", "sex", "age"]
+    rows = list(dt.rows(type='dict'))
+    assert dt.columns == ("id", "name", "sex", "age")
     assert len(rows) == len(data)
     assert rows[0]["id"] == 3
     assert rows[1]["id"] == 1
