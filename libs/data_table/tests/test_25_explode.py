@@ -39,3 +39,38 @@ def test_explode():
     assert dt["favorite__name"]  == expected_data["favorite__name"]
     assert dt["favorite__note"]  == expected_data["favorite__note"]
 
+
+
+
+def test_explode_column_order():
+    """カラム順"""
+
+    # 入力データ
+    columns = ("id", "name", "favorite")
+    data = [
+        [
+            {"1": 1, "2": 2},
+            {"A": "Alice", "B": "Bob"},
+            {"animal": "Dog", "music": "Rock"},
+        ]
+    ]
+
+    # カラム、データの確認
+    dt = DataTable(data=data, columns=columns)
+
+    dt = dt.explode(key="id", sep='_')
+    assert dt.row_count            == 1
+    assert dt.columns              == ("id", "id_1", "id_2", "name", "favorite")
+    assert dt.rows(type='list')[0] == [None, 1, 2, {"A": "Alice", "B": "Bob"}, {"animal": "Dog", "music": "Rock"}]
+
+    dt = dt.explode(key="favorite", sep='_')
+    assert dt.row_count            == 1
+    assert dt.columns              == ("id", "id_1", "id_2", "name", "favorite", "favorite_animal", "favorite_music")
+    assert dt.rows(type='list')[0] == [None, 1, 2, {"A": "Alice", "B": "Bob"}, None, "Dog", "Rock"]
+
+    dt = dt.explode(key="name", sep='_')
+    assert dt.row_count            == 1
+    assert dt.columns              == ("id", "id_1", "id_2", "name", "name_A", "name_B", "favorite", "favorite_animal", "favorite_music")
+    assert dt.rows(type='list')[0] == [None, 1, 2, None, "Alice", "Bob", None, "Dog", "Rock"]
+
+

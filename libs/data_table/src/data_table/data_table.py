@@ -189,11 +189,6 @@ class DataTable():
         # カラム名セット（更新）
         self.__columns = str_columns
 
-    # @property
-    # def __columns_alt(self) -> List[str]:
-    #     """カラム名リスト／非存在時はカラム番号"""
-    #     return self.columns if self.columns else list(range(0, self.column_count))
-
     @property
     def row_count(self) -> int:
         """レコード数"""
@@ -364,13 +359,13 @@ class DataTable():
         return None, records
 
 
-
     # DataTable複製
     def clone(self) -> Self:
         """DataTable複製"""
         columns = self.__columns
         records = self.rows(type='list')
         return DataTable(data=records, columns=columns)
+
 
     # カラム名リネーム
     def rename(self, columns:Dict|List):
@@ -478,9 +473,8 @@ class DataTable():
             for i in range(0, self.row_count):
                 self.__records[i].append(values[i])
         else:
-            # カラムが存在する場合は更新
+            # カラムが存在する場合は値を更新
             idx:int = self.columns.index(key)
-            self.__columns[idx] = key
             for i in range(0, self.row_count):
                 self.__records[i][idx] = values[i]
 
@@ -803,12 +797,17 @@ class DataTable():
             else:
                 buf.append(row)
 
-        #  並び替え済みのカラム名（未使用）
-        key_idx:int = self.columns.index(key)
+        # カラム名並び替え
+        key_pos:int = self.columns.index(key)+1
         reorderd_keys:List[str] = (
-            list(self.columns[0:key_idx])
+            list(self.columns[0:key_pos])
             + new_keys
-            + list(self.columns[key_idx+1:])
+            + list(self.columns[key_pos:])
         )
+        # レコードカラム並び替え
+        buf = [
+            [ row.get(k) for k in reorderd_keys ] 
+            for row in buf 
+        ]
 
-        return DataTable(data=buf)
+        return DataTable(data=buf, columns=reorderd_keys)
