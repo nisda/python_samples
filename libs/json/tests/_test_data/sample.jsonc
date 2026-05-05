@@ -1,0 +1,14 @@
+{
+    "id" : "00001",      // この部分は無視される
+    // "name" : "Banana",   行全体が無視される。  
+    "color" : "yellow",
+    "price" : 100,
+    "country": [
+        "Philippines", 
+        /* ブロックコメントにも対応
+        "Ecuador" ,
+        */
+        "Indonesia"
+    ]
+}
+

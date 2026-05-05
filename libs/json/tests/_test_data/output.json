@@ -1,0 +1,7 @@
+{
+  "id": "00001",
+  "color": "yellow",
+  "price": 100,
+  "rate": "Decimal('1.64')",
+  "date": "datetime.date(2025, 12, 26)"
+}
