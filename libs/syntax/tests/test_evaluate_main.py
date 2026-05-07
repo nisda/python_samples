@@ -119,10 +119,10 @@ def test_evaluate(expr, expected):
         }),
         "f" : -12345.67,
     }
-    # ret = evaluate_entrance(expr=expr, context=data)
+    # ret = evaluate_entrance(expr=expr, mapping=data)
     # assert ret == expected
 
-    ret = Evaluater().evaluate(expr=expr, context=data)
+    ret = Evaluater().eval(expr, mapping=data)
     assert ret == expected
 
 
