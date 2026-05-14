@@ -54,6 +54,16 @@ from syntax import Evaluater
         pytest.param("1 == 1 and ('a' == 'b' or 'A' == 'B')", False),
         pytest.param("1 == 1 and not ('a' == 'b' or 'A' == 'B')", True),
 
+        # ビット演算子
+        pytest.param("True  & True", True),
+        pytest.param("False & True", False),
+        pytest.param("True  | True", True),
+        pytest.param("False | True", True),
+        pytest.param("False | False", False),
+        pytest.param("True  ^ True", False),
+        pytest.param("False ^ True", True),
+        pytest.param("False ^ False", False),
+
         # 添え字
         pytest.param("a", "A"),
         pytest.param("b['ba']", {"baa" : "BAA"}),
@@ -80,6 +90,8 @@ from syntax import Evaluater
         pytest.param("f'[{f:0>15,.4f}]'", "[000-12,345.6700]"),
         pytest.param("f'[{{f:0>15,.4f}}]'", "[{f:0>15,.4f}]"),      # escape
         pytest.param("f'[{{{f:0>15,.4f}}}]'", "[{000-12,345.6700}]"),
+
+
 
     ]
 )
