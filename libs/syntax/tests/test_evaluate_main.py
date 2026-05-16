@@ -19,6 +19,10 @@ from syntax import Evaluater
         pytest.param("r'a'", "a"),
         pytest.param("True", True),
 
+        # Literal:Builtin関数
+        pytest.param("str", str),
+        pytest.param("map", map),
+
         # List / Tuple / Dict / Set
         pytest.param("[0, 1, 'a', 'b']", [0, 1, 'a', 'b']),
         pytest.param("(0, 1, 'a', 'b')", (0, 1, 'a', 'b')),

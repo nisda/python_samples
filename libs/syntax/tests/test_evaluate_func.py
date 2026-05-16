@@ -8,8 +8,11 @@ from syntax import Evaluater
 
 SAFE_FUNCTIONS = {
     "my_func": lambda x, y, z='Z': f"{x}-{y}-{z}",
+    "str": None,
     "int": None,
+    "list": None,
     "len": None,
+    "map": None,
     "unknown": None,
 }
 
@@ -24,6 +27,7 @@ SAFE_FUNCTIONS = {
         pytest.param("int('100') * int('20') == 2000", True),
         pytest.param("int('100') * int('20') == 2001", False),
         pytest.param("len([0, 0, 0, 0])", 4),
+        pytest.param("list(map(str, [0, 0, 0, 0]))", ["0", "0", "0", "0"]),
 
         # f-string 内
         pytest.param("f\"{len([0, 0, 0, 0])}\"", "4"),
@@ -37,6 +41,7 @@ def test_evaluate_func(expr, expected):
 
     ret = evaluate.eval(expr, mapping=None)
     assert ret == expected
+
 
 
 @pytest.mark.parametrize(
@@ -54,7 +59,7 @@ def test_evaluate_func(expr, expected):
     ]
 )
 def test_evaluate_error(expr, e_type, e_msg):
-    """"""
+    """異常系"""
 
     evaluate = Evaluater(funcs=SAFE_FUNCTIONS)
 
