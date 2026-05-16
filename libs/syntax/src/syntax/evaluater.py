@@ -366,6 +366,7 @@ class Evaluater():
             mapping:Dict[str, Any],
             recursive:bool = True,
             original_type:bool=True,
+            convert_dictkey:bool=False,
             errors:Literal['raise', 'coerce', 'ignore']='raise',
         ) -> Any:
         """テンプレートへのデータマッピング（再帰実行可）"""
@@ -414,10 +415,11 @@ class Evaluater():
                     raise
 
         # パラメータまとめ
-        common_params = {
+        recursion_params = {
             "mapping" : mapping,
             "recursive" : recursive,
             "original_type" : original_type,
+            "convert_dictkey" : convert_dictkey,
             "errors" : errors,
         }
 
@@ -430,20 +432,26 @@ class Evaluater():
                 return template
 
         elif isinstance(template, Dict):
-            return {
-                k: self.format(v, **common_params)
-                for k,v in template.items()
-            }
+            if convert_dictkey:
+                return {
+                    self.format(k, **recursion_params): self.format(v, **recursion_params)
+                    for k,v in template.items()
+                }
+            else:
+                return {
+                    k: self.format(v, **recursion_params)
+                    for k,v in template.items()
+                }
 
         elif isinstance(template, List):
             return [
-                self.format(v, **common_params)
+                self.format(v, **recursion_params)
                 for v in template
             ]
 
         elif isinstance(template, Tuple):
             return tuple(
-                self.format(v, **common_params)
+                self.format(v, **recursion_params)
                 for v in template
             )
 

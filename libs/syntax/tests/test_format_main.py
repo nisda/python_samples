@@ -30,7 +30,8 @@ INPUT_DATA = {
 
 
 
-"""基本動作（階層アクセス）"""
+
+"""階層アクセス"""
 @pytest.mark.parametrize(
     [
         "expr", "expect",
@@ -53,8 +54,8 @@ INPUT_DATA = {
         pytest.param("{b}"              , [{"b0a": ({"b0a0a":"B0A0A"},)}]),    # 階層途中
    ]
 )
-def test_format(expr, expect):
-    """基本動作（階層アクセス）"""
+def test_deep_access(expr, expect):
+    """階層アクセス"""
 
     evaluater = Evaluater()
     ret = evaluater.format(expr, mapping=INPUT_DATA)
@@ -85,7 +86,7 @@ def test_format(expr, expect):
 
    ]
 )
-def test_format(expr, original_type, expcted):
+def test_format_original_type(expr, original_type, expcted):
     """オリジナルタイプ指定"""
 
     evaluater = Evaluater()
@@ -111,7 +112,7 @@ def test_format(expr, original_type, expcted):
         pytest.param("{c.datetime:{d.date_format}}", "20260430"),
    ]
 )
-def test_spec(expr, expect):
+def test_format_spec(expr, expect):
     """フォーマット指定"""
 
     evaluater = Evaluater()

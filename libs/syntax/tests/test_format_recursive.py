@@ -176,6 +176,55 @@ def test_not_recursive(template, expected):
     assert type(ret) == type(expected)
 
 
+"""dictkeyの変換指定"""
+# @pytest.mark.parametrize(
+#     [
+#         "template", "dict", "expected",
+#     ],
+#     [
+#         pytest.param({"id": "{id}"}, {"id": "{id}"}),                          # dict
+#         pytest.param(["{id}", ("{id}", "{id}")], ["{id}", ("{id}", "{id}")]),  # list/tuple
+#         pytest.param("{id}", "00001"),                                         # str
+#     ]
+# )
+# def test_dicekey(template, expected):
+def test_convert_dictkey():
+    template = {
+        "{id}" : {
+            "name" : "{name}",
+            "{attr.name}" : "{attr.value}",
+        }
+    }
+    mapping_data = {
+        "id" : 1,
+        "name" : "Alice",
+        "attr" : {
+            "name" : "animal",
+            "value" : "dog"
+        }
+    }
+
+    # dictkey の変換アリ
+    evaluater = Evaluater()
+    ret = evaluater.format(template, mapping=mapping_data, convert_dictkey=True)
+    assert ret == {
+        1 : {
+            "name" : "Alice",
+            "animal" : "dog",
+        }
+    }
+
+
+    # dictkey の変換なし
+    evaluater = Evaluater()
+    ret = evaluater.format(template, mapping=mapping_data, convert_dictkey=False)
+    assert ret == {
+        "{id}" : {
+            "name" : "Alice",
+            "{attr.name}" : "dog",
+        }
+    }
+
 
 
 
