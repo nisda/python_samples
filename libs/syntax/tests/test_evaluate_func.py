@@ -8,6 +8,7 @@ from syntax import Evaluater
 
 SAFE_FUNCTIONS = {
     "my_func": lambda x, y, z='Z': f"{x}-{y}-{z}",
+    "my_func2": lambda x: x,
     "str": None,
     "int": None,
     "list": None,
@@ -23,6 +24,8 @@ SAFE_FUNCTIONS = {
     [
         pytest.param("my_func('a', 12, 'x')", 'a-12-x'),
         pytest.param("my_func('a', 12)", 'a-12-Z'),
+        pytest.param("my_func2(1)", 1),
+        pytest.param("my_func2({})", {}),
         pytest.param("int('12345')", 12345),
         pytest.param("int('100') * int('20') == 2000", True),
         pytest.param("int('100') * int('20') == 2001", False),

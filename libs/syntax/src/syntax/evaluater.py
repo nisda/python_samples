@@ -270,6 +270,9 @@ class Evaluater():
     """node本処理"""
     def __evaluate_node(self, node:ast.AST, context:Dict[str, Any]) -> Any:
 
+        print(f"node.type: {type(node)}")
+
+
         # None
         if node is None:
             return None
@@ -357,6 +360,58 @@ class Evaluater():
 
 
 
+
+    @classmethod
+    def determine_convert_method(cls, expr:str) -> Literal['eval', 'f-string']:
+
+        # 前提チェック： {...} でなかったら f-string 
+        if not ( expr.startswith('{') and expr.endswith('}') ):
+            return "f-string"
+
+        # 前提チェック： {{... はエスケープされた文字{であるため f-string 
+        if expr.startswith('{{'):
+            return "f-string"
+
+        try:
+            # format(expr) を分解
+            elements = [
+                dict(zip(['literal_text', 'field_name', 'format_spec', 'conversion'], p))
+                for p in Formatter().parse(expr)
+            ]
+            # １要素のみ且つ field_name のみである
+            ret = bool(
+                len(elements) == 1
+                and not elements[0]['literal_text']
+                and not elements[0]['format_spec']
+                and not elements[0]['conversion']
+                and elements[0]['field_name']
+            )
+            if ret:
+                return 'eval'
+            else:
+                return 'f-string'
+        except Exception as e:
+            # {} のネストがある場合は解析に失敗 ->  次の判断ロジックに回す
+            pass
+
+        try:
+            tree = ast.parse(expr)
+            if len(tree.body) > 1:
+                raise ValueError("Multiple commands are not supported.")
+
+            # 基本的には eval。
+            # それ以外のパターンは現時点で不明
+            node = tree.body[0].value
+            if isinstance(node, ast.Set):
+                return 'eval'
+
+            raise ValueError(f"Type <{type(node)}> are not supported.")
+
+        except Exception as e:
+            raise
+
+
+
     def eval(self, expression:str, /, mapping:Dict[str, Any]):
         # ast解析
         tree = ast.parse(expression)
@@ -377,7 +432,6 @@ class Evaluater():
 
 
 
-
     def format(
             self,
             template:str|Dict|List|Tuple,
@@ -391,40 +445,51 @@ class Evaluater():
         """テンプレートへのデータマッピング（再帰実行可）"""
 
 
-        # オリジナルタイプ変換可否関数
-        def __is_fieldname_only(expr:str) -> bool:
-            try:
-                # format(expr) を分解
-                elements = [
-                    dict(zip(['literal_text', 'field_name', 'format_spec', 'conversion'], p))
-                    for p in Formatter().parse(expr)
-                ]
-                # １要素のみ且つ field_name のみである
-                ret = bool(
-                    len(elements) == 1
-                    and not elements[0]['literal_text']
-                    and not elements[0]['format_spec']
-                    and not elements[0]['conversion']
-                    and elements[0]['field_name']
-                )
-                return ret
-            except Exception as e:
-                return False
+        # # オリジナルタイプ変換可否関数
+        # def __is_fieldname_only(expr:str) -> bool:
+        #     try:
+        #         # format(expr) を分解
+        #         elements = [
+        #             dict(zip(['literal_text', 'field_name', 'format_spec', 'conversion'], p))
+        #             for p in Formatter().parse(expr)
+        #         ]
+        #         # １要素のみ且つ field_name のみである
+        #         ret = bool(
+        #             len(elements) == 1
+        #             and not elements[0]['literal_text']
+        #             and not elements[0]['format_spec']
+        #             and not elements[0]['conversion']
+        #             and elements[0]['field_name']
+        #         )
+        #         print("***************")
+        #         print(f"__is_fieldname_only: {ret}")
+        #         print("***************")
+        #         return ret
+        #     except Exception as e:
+        #         print("***************")
+        #         print(f"__is_fieldname_only: exception")
+        #         print("***************")
+        #         raise
+        #         return False
 
 
         # データ割り当て関数
         def __assign_data(expr:str, mapping:Dict):
             try:
                 try:
-                    if original_type and __is_fieldname_only(expr):
+
+                    if original_type and self.determine_convert_method(expr) == 'eval':
                         return self.eval(expr[1:-1], mapping=mapping)
                     else:
                         escaped_expr = expr.replace('"', '\\"')
                         return self.eval(f'f"{escaped_expr}"', mapping=mapping)
+
                 except Exception as e:
                     e_type:Type = type(e)
                     e_msg:str   = f"{str(e).rstrip('.')}. occurred at expression='{expr}'"
                     raise e_type(e_msg) from e
+
+
             except Exception as e:
                 if errors == 'coerce':
                     return None

@@ -265,7 +265,7 @@ def test_error_handling(template, errors, expected):
         pytest.param({"id": "{id}", "unknown": "{id:xyz}"}, ValueError, "Invalid format specifier 'xyz' for object of type 'str'. occurred at expression='{id:xyz}'"),
     ]
 )
-def test_error_handling(template, e_type, e_msg):
+def test_error_raise(template, e_type, e_msg):
 
     evaluater = Evaluater()
     with pytest.raises(Exception) as e:
