@@ -157,6 +157,8 @@ class Evaluater():
             self.__evaluate_node(node.right, context)
         )
 
+
+
     def __evaluate_compare(self, node:ast.Compare, context:Dict[str, Any]):
         """比較処理"""
 
@@ -169,6 +171,20 @@ class Evaluater():
             left_val = right_val
         else:
             return True
+
+
+    def __evaluate_if_exp(self, node:ast.IfExp, context:Dict[str, Any]):
+        """三項演算の処理"""
+
+        # 1. 条件式（test）を評価する
+        condition_value = self.__evaluate_node(node.test, context)
+
+        # 2. 条件が真なら body、偽なら orelse を評価して返す
+        if condition_value:
+            return self.__evaluate_node(node.body, context)
+        else:
+            return self.__evaluate_node(node.orelse, context)
+
 
     def __evaluate_bool_op(self, node:ast.BoolOp, context:Dict[str, Any]):
         """and / or を評価する (短絡評価対応)"""
@@ -239,6 +255,8 @@ class Evaluater():
 
 
     def __evaluate_joined_str(self, node:ast.JoinedStr, context:Dict[str, Any]):
+        '''f-string'''
+
         result = []
         for part in node.values:
             res = self.__evaluate_node(part, context)
@@ -334,6 +352,10 @@ class Evaluater():
         # 比較
         if isinstance(node, ast.Compare):
             return self.__evaluate_compare(node, context)
+
+        # 三項演算
+        if isinstance(node, ast.IfExp):
+            return self.__evaluate_if_exp(node, context)
 
         # 論理演算 (and / or)
         if isinstance(node, ast.BoolOp):

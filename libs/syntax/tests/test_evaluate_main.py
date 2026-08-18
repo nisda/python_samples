@@ -45,6 +45,16 @@ from syntax import Evaluater
         pytest.param("2 == 2 < 2.1",True ),
         pytest.param("2 == 2 < 2.1 >= 2.2", False),
 
+        # 三項演算
+        pytest.param("'A' if 1 == 1 else 'B'", 'A'),
+        pytest.param("'A' if 1 == 2 else 'B'", 'B'),
+        pytest.param("'A' if False else 'B'", 'B'),
+        pytest.param("'A' if 1 == 2 or True else 'B'", 'A'),
+        pytest.param("'A' if (1 == 2 and True) else 'B'", 'B'),
+        pytest.param("2 + 3 if 1 == 1 else None", 5),
+        pytest.param("2 + 3 if 1 != 1 else None", None),
+
+
         # 論理演算
         pytest.param("2 <  3 and 'a' == 'a'", True),
         pytest.param("2 <  3 and 'a' == 'b'", False),
